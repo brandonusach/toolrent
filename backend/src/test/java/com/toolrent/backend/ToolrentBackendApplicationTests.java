@@ -1,10 +1,10 @@
-package cl.toolrent.app;
+package com.toolrent.backend;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 
 @SpringBootTest
-class ToolrentApplicationTests {
+class ToolrentBackendApplicationTests {
 
 	@Test
 	void contextLoads() {
