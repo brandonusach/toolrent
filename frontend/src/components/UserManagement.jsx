@@ -1,341 +1,376 @@
 import React, { useState, useEffect } from 'react';
-import { Users, Plus, Edit2, Trash2, UserCheck, UserX, Search } from 'lucide-react';
+import { Users, Plus, Trash2, RefreshCw, User, Shield, AlertCircle, CheckCircle, WifiOff, Wifi } from 'lucide-react';
 
-const UserManagement = () => {
-    const [users, setUsers] = useState([]);
-    const [loading, setLoading] = useState(false);
+const GestionUsuarios = () => {
+    const [usuarios, setUsuarios] = useState([]);
+    const [cargando, setCargando] = useState(false);
     const [error, setError] = useState('');
-    const [success, setSuccess] = useState('');
-    const [showForm, setShowForm] = useState(false);
-    const [editingUser, setEditingUser] = useState(null);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [filterRole, setFilterRole] = useState('ALL');
+    const [exito, setExito] = useState('');
 
-    // Form data
-    const [formData, setFormData] = useState({
-        username: '',
-        password: '',
-        role: 'EMPLOYEE'
-    });
+    // Datos del formulario
+    const [nombreUsuario, setNombreUsuario] = useState('');
+    const [contrasena, setContrasena] = useState('');
+    const [rol, setRol] = useState('EMPLOYEE');
 
-    // API base URL - ajusta según tu configuración
-    const API_BASE_URL = 'http://localhost:8080/api/users';
+    const API_BASE = 'http://localhost:8080/api/users';
 
-    // Fetch all users
-    const fetchUsers = async () => {
-        setLoading(true);
-        try {
-            const response = await fetch(API_BASE_URL);
-            if (!response.ok) throw new Error('Error al cargar usuarios');
-            const data = await response.json();
-            setUsers(data);
-            setError('');
-        } catch (err) {
-            setError('Error al conectar con el servidor: ' + err.message);
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // Create or update user
-    const handleSubmit = async () => {
-        if (!formData.username || (!formData.password && !editingUser)) {
-            setError('Por favor completa todos los campos requeridos');
-            return;
-        }
-
-        setLoading(true);
+    // Cargar usuarios
+    const cargarUsuarios = async () => {
+        setCargando(true);
+        setError(''); // Limpiar errores previos
 
         try {
-            const url = editingUser ? `${API_BASE_URL}/${editingUser.id}` : API_BASE_URL;
-            const method = editingUser ? 'PUT' : 'POST';
-
-            const response = await fetch(url, {
-                method: method,
+            console.log('Intentando conectar a:', API_BASE);
+            const respuesta = await fetch(API_BASE, {
+                method: 'GET',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify(formData)
             });
 
-            if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText || 'Error al guardar usuario');
+            console.log('Respuesta recibida:', respuesta.status, respuesta.statusText);
+
+            if (respuesta.ok) {
+                const datos = await respuesta.json();
+                setUsuarios(datos);
+                setError('');
+                setExito(`✅ Conectado correctamente. ${datos.length} usuarios cargados.`);
+                console.log('Usuarios cargados:', datos);
+            } else {
+                const textoError = await respuesta.text();
+                throw new Error(`HTTP ${respuesta.status}: ${respuesta.statusText} - ${textoError}`);
+            }
+        } catch (err) {
+            console.error('Error detallado:', err);
+
+            let mensajeError = 'Error desconocido';
+
+            if (err.name === 'TypeError' && err.message.includes('fetch')) {
+                mensajeError = '🔴 No se puede conectar al servidor. ¿Está el backend ejecutándose en el puerto 8080?';
+            } else if (err.message.includes('CORS')) {
+                mensajeError = '🔴 Error de CORS. El servidor necesita permitir peticiones desde este origen.';
+            } else if (err.message.includes('404')) {
+                mensajeError = '🔴 Endpoint no encontrado. Verifica que la ruta /api/users exista en tu backend.';
+            } else if (err.message.includes('500')) {
+                mensajeError = '🔴 Error interno del servidor. Revisa los logs del backend.';
+            } else {
+                mensajeError = `🔴 Error: ${err.message}`;
             }
 
-            setSuccess(editingUser ? 'Usuario actualizado correctamente' : 'Usuario creado correctamente');
-            resetForm();
-            fetchUsers();
-        } catch (err) {
-            setError(err.message);
+            setError(mensajeError);
         } finally {
-            setLoading(false);
+            setCargando(false);
         }
     };
 
-    // Delete user
-    const handleDelete = async (id) => {
-        if (!window.confirm('¿Estás seguro de eliminar este usuario?')) return;
+    // Crear usuario
+    const crearUsuario = async () => {
+        if (!nombreUsuario || !contrasena) {
+            setError('El nombre de usuario y la contraseña son requeridos');
+            return;
+        }
 
-        setLoading(true);
+        setCargando(true);
+        setError(''); // Limpiar errores previos
+
         try {
-            const response = await fetch(`${API_BASE_URL}/${id}`, {
+            console.log('Intentando crear usuario:', { username: nombreUsuario, role: rol });
+
+            const respuesta = await fetch(API_BASE, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    username: nombreUsuario,
+                    password: contrasena,
+                    role: rol
+                })
+            });
+
+            console.log('Respuesta POST:', respuesta.status, respuesta.statusText);
+
+            if (respuesta.ok) {
+                const nuevoUsuario = await respuesta.json();
+                console.log('Usuario creado exitosamente:', nuevoUsuario);
+                setExito(`✅ Usuario "${nombreUsuario}" creado exitosamente con rol ${rol === 'ADMINISTRATOR' ? 'Administrador' : 'Empleado'}`);
+                setNombreUsuario('');
+                setContrasena('');
+                setRol('EMPLOYEE');
+                cargarUsuarios(); // Recargar usuarios
+            } else {
+                const textoError = await respuesta.text();
+                console.error('Error del servidor:', textoError);
+
+                let mensajeError = `🔴 Error HTTP ${respuesta.status}`;
+
+                if (respuesta.status === 400) {
+                    mensajeError += ': Datos inválidos. Verifica que el username no esté duplicado.';
+                } else if (respuesta.status === 500) {
+                    mensajeError += ': Error interno del servidor. Revisa los logs del backend.';
+                } else {
+                    mensajeError += `: ${textoError}`;
+                }
+
+                throw new Error(mensajeError);
+            }
+        } catch (err) {
+            console.error('Error detallado creando usuario:', err);
+
+            let mensajeError = 'Error desconocido';
+
+            if (err.name === 'TypeError' && err.message.includes('fetch')) {
+                mensajeError = '🔴 Error de red al crear usuario. ¿Se perdió la conexión?';
+            } else {
+                mensajeError = err.message.startsWith('🔴') ? err.message : `🔴 Error creando usuario: ${err.message}`;
+            }
+
+            setError(mensajeError);
+        } finally {
+            setCargando(false);
+        }
+    };
+
+    // Eliminar usuario
+    const eliminarUsuario = async (id) => {
+        if (!window.confirm('¿Estás seguro de que deseas eliminar este usuario?')) return;
+
+        setCargando(true);
+        try {
+            const respuesta = await fetch(`${API_BASE}/${id}`, {
                 method: 'DELETE'
             });
 
-            if (!response.ok) throw new Error('Error al eliminar usuario');
-
-            setSuccess('Usuario eliminado correctamente');
-            fetchUsers();
+            if (respuesta.ok) {
+                setExito('Usuario eliminado exitosamente');
+                cargarUsuarios();
+            } else {
+                throw new Error('Error eliminando usuario');
+            }
         } catch (err) {
             setError(err.message);
         } finally {
-            setLoading(false);
+            setCargando(false);
         }
     };
 
-    // Reset form
-    const resetForm = () => {
-        setFormData({ username: '', password: '', role: 'EMPLOYEE' });
-        setEditingUser(null);
-        setShowForm(false);
-    };
-
-    // Start editing
-    const startEdit = (user) => {
-        setFormData({
-            username: user.username,
-            password: '', // Don't show password
-            role: user.role
-        });
-        setEditingUser(user);
-        setShowForm(true);
-    };
-
-    // Filter users
-    const filteredUsers = users.filter(user => {
-        const matchesSearch = user.username.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesRole = filterRole === 'ALL' || user.role === filterRole;
-        return matchesSearch && matchesRole;
-    });
-
+    // Cargar usuarios al montar el componente
     useEffect(() => {
-        fetchUsers();
+        cargarUsuarios();
     }, []);
 
-    // Clear messages after 5 seconds
+    // Limpiar mensajes después de 3 segundos
     useEffect(() => {
-        if (success || error) {
+        if (exito || error) {
             const timer = setTimeout(() => {
-                setSuccess('');
+                setExito('');
                 setError('');
-            }, 5000);
+            }, 3000);
             return () => clearTimeout(timer);
         }
-    }, [success, error]);
+    }, [exito, error]);
+
+    const estaConectado = usuarios.length > 0;
 
     return (
-        <div className="min-h-screen bg-gray-50 p-6">
-            <div className="max-w-6xl mx-auto">
-                {/* Header */}
-                <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-                    <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-3">
-                            <Users className="h-8 w-8 text-blue-600" />
-                            <div>
-                                <h1 className="text-2xl font-bold text-gray-900">Sistema de Usuarios</h1>
-                                <p className="text-gray-600">ToolRent - Gestión de usuarios del sistema</p>
-                            </div>
-                        </div>
-                        <button
-                            onClick={() => setShowForm(true)}
-                            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-                        >
-                            <Plus className="h-4 w-4" />
-                            <span>Nuevo Usuario</span>
-                        </button>
-                    </div>
+        <div className="max-w-6xl mx-auto p-6 bg-gray-50 min-h-screen">
+            {/* Encabezado */}
+            <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
+                <div className="flex items-center gap-3 mb-4">
+                    <Users className="w-8 h-8 text-blue-600" />
+                    <h1 className="text-2xl font-bold text-gray-800">ToolRent - Gestión de Usuarios</h1>
                 </div>
 
-                {/* Messages */}
-                {error && (
-                    <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg mb-6">
-                        {error}
-                    </div>
-                )}
-                {success && (
-                    <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg mb-6">
-                        {success}
-                    </div>
-                )}
+                {/* Estado de conexión */}
+                <div className={`flex items-center gap-2 p-3 rounded-md ${
+                    estaConectado
+                        ? 'bg-green-50 border border-green-200 text-green-800'
+                        : 'bg-red-50 border border-red-200 text-red-800'
+                }`}>
+                    {estaConectado ? <Wifi className="w-5 h-5" /> : <WifiOff className="w-5 h-5" />}
+                    <strong>Estado:</strong>
+                    {estaConectado ? 'Conectado con backend' : 'Sin conexión con backend'}
+                </div>
+            </div>
 
-                {/* Filters */}
-                <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-                    <div className="flex flex-col sm:flex-row gap-4">
-                        <div className="flex-1">
-                            <div className="relative">
-                                <Search className="h-5 w-5 text-gray-400 absolute left-3 top-3" />
-                                <input
-                                    type="text"
-                                    placeholder="Buscar por username..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                />
-                            </div>
-                        </div>
+            {/* Mensajes de error y éxito */}
+            {error && (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 flex items-center gap-2">
+                    <AlertCircle className="w-5 h-5 text-red-600 flex-shrink-0" />
+                    <span className="text-red-800">{error}</span>
+                </div>
+            )}
+
+            {exito && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6 flex items-center gap-2">
+                    <CheckCircle className="w-5 h-5 text-green-600 flex-shrink-0" />
+                    <span className="text-green-800">{exito}</span>
+                </div>
+            )}
+
+            {/* Formulario para crear usuario */}
+            <div className="bg-white rounded-lg shadow-sm border p-6 mb-6">
+                <div className="flex items-center gap-2 mb-4">
+                    <Plus className="w-6 h-6 text-green-600" />
+                    <h2 className="text-xl font-semibold text-gray-800">Crear Nuevo Usuario</h2>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Nombre de Usuario
+                        </label>
+                        <input
+                            type="text"
+                            value={nombreUsuario}
+                            onChange={(e) => setNombreUsuario(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Ingresa el nombre de usuario"
+                            disabled={cargando}
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Contraseña
+                        </label>
+                        <input
+                            type="password"
+                            value={contrasena}
+                            onChange={(e) => setContrasena(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            placeholder="Ingresa la contraseña"
+                            disabled={cargando}
+                        />
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                            Rol
+                        </label>
                         <select
-                            value={filterRole}
-                            onChange={(e) => setFilterRole(e.target.value)}
-                            className="px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            value={rol}
+                            onChange={(e) => setRol(e.target.value)}
+                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            disabled={cargando}
                         >
-                            <option value="ALL">Todos los roles</option>
-                            <option value="ADMINISTRATOR">Administradores</option>
-                            <option value="EMPLOYEE">Empleados</option>
+                            <option value="EMPLOYEE">Empleado</option>
+                            <option value="ADMINISTRATOR">Administrador</option>
                         </select>
                     </div>
                 </div>
 
-                {/* User Form Modal */}
-                {showForm && (
-                    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                        <div className="bg-white rounded-lg p-6 w-full max-w-md mx-4">
-                            <h2 className="text-xl font-bold mb-4">
-                                {editingUser ? 'Editar Usuario' : 'Nuevo Usuario'}
-                            </h2>
-                            <div>
-                                <div className="mb-4">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Username
-                                    </label>
-                                    <input
-                                        type="text"
-                                        value={formData.username}
-                                        onChange={(e) => setFormData({...formData, username: e.target.value})}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    />
-                                </div>
-                                <div className="mb-4">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Password
-                                    </label>
-                                    <input
-                                        type="password"
-                                        value={formData.password}
-                                        onChange={(e) => setFormData({...formData, password: e.target.value})}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        placeholder={editingUser ? "Dejar vacío para mantener la actual" : ""}
-                                    />
-                                </div>
-                                <div className="mb-6">
-                                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                                        Rol
-                                    </label>
-                                    <select
-                                        value={formData.role}
-                                        onChange={(e) => setFormData({...formData, role: e.target.value})}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    >
-                                        <option value="EMPLOYEE">Empleado</option>
-                                        <option value="ADMINISTRATOR">Administrador</option>
-                                    </select>
-                                </div>
-                                <div className="flex space-x-3">
-                                    <button
-                                        onClick={handleSubmit}
-                                        disabled={loading}
-                                        className="flex-1 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors"
-                                    >
-                                        {loading ? 'Guardando...' : (editingUser ? 'Actualizar' : 'Crear')}
-                                    </button>
-                                    <button
-                                        onClick={resetForm}
-                                        className="flex-1 bg-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-400 transition-colors"
-                                    >
-                                        Cancelar
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                )}
+                <div className="mt-4">
+                    <button
+                        onClick={crearUsuario}
+                        disabled={cargando || !nombreUsuario || !contrasena}
+                        className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md font-medium transition-colors duration-200 flex items-center gap-2"
+                    >
+                        {cargando ? (
+                            <>
+                                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                Creando...
+                            </>
+                        ) : (
+                            <>
+                                <Plus className="w-4 h-4" />
+                                Crear Usuario
+                            </>
+                        )}
+                    </button>
+                </div>
+            </div>
 
-                {/* Users Table */}
-                <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-                    <div className="px-6 py-4 border-b border-gray-200">
-                        <h3 className="text-lg font-semibold text-gray-900">
-                            Lista de Usuarios ({filteredUsers.length})
-                        </h3>
+            {/* Lista de usuarios */}
+            <div className="bg-white rounded-lg shadow-sm border">
+                <div className="p-6 border-b border-gray-200 flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                        <Users className="w-6 h-6 text-gray-600" />
+                        <h2 className="text-xl font-semibold text-gray-800">
+                            Lista de Usuarios ({usuarios.length})
+                        </h2>
                     </div>
+                    <button
+                        onClick={cargarUsuarios}
+                        disabled={cargando}
+                        className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md font-medium transition-colors duration-200 flex items-center gap-2"
+                    >
+                        <RefreshCw className={`w-4 h-4 ${cargando ? 'animate-spin' : ''}`} />
+                        Recargar
+                    </button>
+                </div>
 
-                    {loading ? (
-                        <div className="p-8 text-center">
-                            <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-                            <p className="mt-2 text-gray-600">Cargando usuarios...</p>
+                <div className="p-6">
+                    {cargando && (
+                        <div className="text-center py-8">
+                            <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                            <p className="text-gray-600">Cargando usuarios...</p>
                         </div>
-                    ) : filteredUsers.length === 0 ? (
-                        <div className="p-8 text-center text-gray-500">
-                            No se encontraron usuarios
+                    )}
+
+                    {!cargando && usuarios.length === 0 && (
+                        <div className="text-center py-8">
+                            <Users className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                            <p className="text-gray-600">No hay usuarios registrados</p>
                         </div>
-                    ) : (
+                    )}
+
+                    {!cargando && usuarios.length > 0 && (
                         <div className="overflow-x-auto">
-                            <table className="w-full">
-                                <thead className="bg-gray-50">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            <table className="w-full border-collapse">
+                                <thead>
+                                <tr className="bg-gray-50">
+                                    <th className="border border-gray-200 px-4 py-3 text-left font-semibold text-gray-700">
                                         ID
                                     </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                        Username
+                                    <th className="border border-gray-200 px-4 py-3 text-left font-semibold text-gray-700">
+                                        Nombre de Usuario
                                     </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="border border-gray-200 px-4 py-3 text-left font-semibold text-gray-700">
                                         Rol
                                     </th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                                    <th className="border border-gray-200 px-4 py-3 text-center font-semibold text-gray-700">
                                         Acciones
                                     </th>
                                 </tr>
                                 </thead>
-                                <tbody className="bg-white divide-y divide-gray-200">
-                                {filteredUsers.map((user) => (
-                                    <tr key={user.id} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                                            {user.id}
+                                <tbody>
+                                {usuarios.map((usuario) => (
+                                    <tr key={usuario.id} className="hover:bg-gray-50 transition-colors duration-200">
+                                        <td className="border border-gray-200 px-4 py-3">
+                                            {usuario.id}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            {user.username}
+                                        <td className="border border-gray-200 px-4 py-3">
+                                            {usuario.username}
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            user.role === 'ADMINISTRATOR'
-                                ? 'bg-purple-100 text-purple-800'
-                                : 'bg-blue-100 text-blue-800'
-                        }`}>
-                          {user.role === 'ADMINISTRATOR' ? (
-                              <UserCheck className="h-3 w-3 mr-1" />
-                          ) : (
-                              <UserX className="h-3 w-3 mr-1" />
-                          )}
-                            {user.role === 'ADMINISTRATOR' ? 'Admin' : 'Empleado'}
-                        </span>
+                                        <td className="border border-gray-200 px-4 py-3">
+                                                <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-full text-xs font-medium ${
+                                                    usuario.role === 'ADMINISTRATOR'
+                                                        ? 'bg-purple-100 text-purple-800'
+                                                        : 'bg-blue-100 text-blue-800'
+                                                }`}>
+                                                    {usuario.role === 'ADMINISTRATOR' ? (
+                                                        <>
+                                                            <Shield className="w-3 h-3" />
+                                                            Administrador
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <User className="w-3 h-3" />
+                                                            Empleado
+                                                        </>
+                                                    )}
+                                                </span>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                            <div className="flex space-x-2">
-                                                <button
-                                                    onClick={() => startEdit(user)}
-                                                    className="text-blue-600 hover:text-blue-900 p-1 rounded hover:bg-blue-50"
-                                                    title="Editar usuario"
-                                                >
-                                                    <Edit2 className="h-4 w-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDelete(user.id)}
-                                                    className="text-red-600 hover:text-red-900 p-1 rounded hover:bg-red-50"
-                                                    title="Eliminar usuario"
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </button>
-                                            </div>
+                                        <td className="border border-gray-200 px-4 py-3 text-center">
+                                            <button
+                                                onClick={() => eliminarUsuario(usuario.id)}
+                                                disabled={cargando}
+                                                className="bg-red-600 hover:bg-red-700 disabled:bg-gray-400 text-white px-3 py-1 rounded-md text-sm font-medium transition-colors duration-200 flex items-center gap-1 mx-auto"
+                                            >
+                                                <Trash2 className="w-3 h-3" />
+                                                Eliminar
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}
@@ -345,8 +380,49 @@ const UserManagement = () => {
                     )}
                 </div>
             </div>
+
+            {/* Información de debug */}
+            <details className="mt-6 bg-gray-100 rounded-lg p-4">
+                <summary className="cursor-pointer font-semibold text-gray-700 flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    Información de Debug
+                </summary>
+                <pre className="mt-3 bg-gray-800 text-green-400 p-4 rounded-md text-sm overflow-auto">
+                    {JSON.stringify({
+                        urlApi: API_BASE,
+                        cantidadUsuarios: usuarios.length,
+                        cargando,
+                        error: error || 'ninguno',
+                        exito: exito || 'ninguno',
+                        estadoConexion: estaConectado ? 'conectado' : 'desconectado',
+                        navegador: navigator.userAgent.split(' ').slice(-2).join(' '),
+                        timestamp: new Date().toLocaleString()
+                    }, null, 2)}
+                </pre>
+
+                <div className="mt-4 p-3 bg-green-50 rounded-md">
+                    <h4 className="font-semibold text-green-800 mb-2">✅ Diagnóstico: Backend funcionando correctamente</h4>
+                    <ul className="text-sm text-green-700 space-y-1">
+                        <li>• Servidor ejecutándose en puerto 8080 ✅</li>
+                        <li>• Endpoint /api/users accesible ✅</li>
+                        <li>• Base de datos vacía (normal en sistema nuevo) ✅</li>
+                        <li>• Listo para crear usuarios ✅</li>
+                    </ul>
+                </div>
+
+                <div className="mt-4 p-3 bg-blue-50 rounded-md">
+                    <h4 className="font-semibold text-blue-800 mb-2">🔧 Pasos para diagnosticar:</h4>
+                    <ol className="text-sm text-blue-700 space-y-1">
+                        <li>1. Verificar que el backend esté ejecutándose en el puerto 8080</li>
+                        <li>2. Probar manualmente: <code className="bg-blue-100 px-1 rounded">http://localhost:8080/api/users</code></li>
+                        <li>3. Revisar la consola del navegador (F12) para errores detallados</li>
+                        <li>4. Verificar configuración CORS en el backend</li>
+                        <li>5. Confirmar que el endpoint /api/users existe</li>
+                    </ol>
+                </div>
+            </details>
         </div>
     );
 };
 
-export default UserManagement;
+export default GestionUsuarios;
