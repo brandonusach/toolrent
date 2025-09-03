@@ -98,7 +98,7 @@ export const AuthProvider = ({ children }) => {
         loading,
         authenticatedFetch,
         isAuthenticated: !!token,
-        isAdmin: user?.role === 'ADMINISTRATOR'
+        isAdmin: user?.role === 'ADMINISTRATOR' || user?.role === 'ADMIN' // Ajustamos para diferentes nombres de rol
     };
 
     return (

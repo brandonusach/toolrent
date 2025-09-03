@@ -1,7 +1,7 @@
 import React from 'react';
 import { AuthProvider, useAuth } from './components/auth/AuthContext';
 import LoginForm from './components/auth/LoginForm';
-import UserManagement from './components/UserManagement';
+import AdminPanel from './components/panel/AdminPanel';
 import './App.css';
 
 // Componente que decide qué mostrar según el estado de autenticación
@@ -10,7 +10,7 @@ const AppContent = () => {
 
     return (
         <div className="App">
-            {isAuthenticated ? <UserManagement /> : <LoginForm />}
+            {isAuthenticated ? <AdminPanel /> : <LoginForm />}
         </div>
     );
 };
