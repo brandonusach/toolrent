@@ -5,7 +5,9 @@ import com.toolrent.backend.services.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
 import java.util.Optional;
 
@@ -17,14 +19,16 @@ public class UserController {
     @Autowired
     private UserService userService;
 
-    // GET - Obtener todos los usuarios
+    // GET - Obtener todos los usuarios (solo ADMIN)
+    @PreAuthorize("hasRole('ADMIN') or hasRole('administrator')")
     @GetMapping
     public ResponseEntity<List<UserEntity>> getAllUsers() {
         List<UserEntity> users = userService.getAllUsers();
         return ResponseEntity.ok(users);
     }
 
-    // GET - Obtener usuario por ID
+    // GET - Obtener usuario por ID (USER y ADMIN pueden ver usuarios)
+    @PreAuthorize("hasAnyRole('EMPLOYEE', 'ADMIN', 'employee', 'administrator')")
     @GetMapping("/{id}")
     public ResponseEntity<UserEntity> getUserById(@PathVariable Long id) {
         Optional<UserEntity> user = userService.getUserById(id);
@@ -32,7 +36,8 @@ public class UserController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // GET - Obtener usuario por username
+    // GET - Obtener usuario por username (USER y ADMIN pueden buscar usuarios)
+    @PreAuthorize("hasAnyRole('USER', 'ADMIN', 'user', 'administrator')")
     @GetMapping("/username/{username}")
     public ResponseEntity<UserEntity> getUserByUsername(@PathVariable String username) {
         Optional<UserEntity> user = userService.getUserByUsername(username);
@@ -40,7 +45,8 @@ public class UserController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
-    // POST - Crear nuevo usuario
+    // POST - Crear nuevo usuario (solo ADMIN)
+    @PreAuthorize("hasRole('ADMIN') or hasRole('administrator')")
     @PostMapping
     public ResponseEntity<?> createUser(@RequestBody UserEntity user) {
         try {
@@ -58,7 +64,8 @@ public class UserController {
         }
     }
 
-    // PUT - Actualizar usuario
+    // PUT - Actualizar usuario (solo ADMIN)
+    @PreAuthorize("hasRole('ADMIN') or hasRole('administrator')")
     @PutMapping("/{id}")
     public ResponseEntity<?> updateUser(@PathVariable Long id, @RequestBody UserEntity userDetails) {
         try {
@@ -72,7 +79,8 @@ public class UserController {
         }
     }
 
-    // DELETE - Eliminar usuario
+    // DELETE - Eliminar usuario (solo ADMIN)
+    @PreAuthorize("hasRole('ADMIN') or hasRole('administrator')")
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteUser(@PathVariable Long id) {
         try {
@@ -86,35 +94,40 @@ public class UserController {
         }
     }
 
-    // GET - Obtener usuarios por rol
+    // GET - Obtener usuarios por rol (solo ADMIN)
+    @PreAuthorize("hasRole('ADMIN') or hasRole('administrator')")
     @GetMapping("/role/{role}")
     public ResponseEntity<List<UserEntity>> getUsersByRole(@PathVariable UserEntity.Role role) {
         List<UserEntity> users = userService.getUsersByRole(role);
         return ResponseEntity.ok(users);
     }
 
-    // GET - Obtener todos los administradores
+    // GET - Obtener todos los administradores (solo ADMIN)
+    @PreAuthorize("hasRole('ADMIN') or hasRole('administrator')")
     @GetMapping("/administrators")
     public ResponseEntity<List<UserEntity>> getAllAdministrators() {
         List<UserEntity> administrators = userService.getAllAdministrators();
         return ResponseEntity.ok(administrators);
     }
 
-    // GET - Obtener todos los empleados
+    // GET - Obtener todos los empleados (USER y ADMIN pueden ver empleados)
+    @PreAuthorize("hasAnyRole('EMPLOYEE', 'ADMIN', 'employee', 'administrator')")
     @GetMapping("/employees")
     public ResponseEntity<List<UserEntity>> getAllEmployees() {
         List<UserEntity> employees = userService.getAllEmployees();
         return ResponseEntity.ok(employees);
     }
 
-    // GET - Contar usuarios por rol
+    // GET - Contar usuarios por rol (solo ADMIN)
+    @PreAuthorize("hasRole('ADMIN') or hasRole('administrator')")
     @GetMapping("/count/{role}")
     public ResponseEntity<Long> countUsersByRole(@PathVariable UserEntity.Role role) {
         long count = userService.countUsersByRole(role);
         return ResponseEntity.ok(count);
     }
 
-    // GET - Verificar si existe username
+    // GET - Verificar si existe username (cualquier usuario autenticado)
+    @PreAuthorize("hasAnyRole('EMPLOYEE', 'ADMIN', 'employee', 'administrator')")
     @GetMapping("/exists/{username}")
     public ResponseEntity<Boolean> existsByUsername(@PathVariable String username) {
         boolean exists = userService.existsByUsername(username);

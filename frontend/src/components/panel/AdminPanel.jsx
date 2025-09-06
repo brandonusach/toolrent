@@ -19,6 +19,14 @@ const AdminPanel = () => {
     const { user, logout } = useAuth();
     const [activeSection, setActiveSection] = useState('dashboard');
 
+    // Función mejorada para verificar si es admin
+    const isUserAdmin = () => {
+        if (!user?.role) return false;
+
+        const role = user.role.toUpperCase();
+        return role === 'ADMINISTRATOR' || role === 'ADMIN';
+    };
+
     // Función para manejar el logout
     const handleLogout = () => {
         if (window.confirm('¿Estás seguro de que deseas cerrar sesión?')) {
@@ -42,9 +50,7 @@ const AdminPanel = () => {
             { id: 'usuarios', icon: Settings, label: 'Usuarios y Roles' }
         ];
 
-        const isAdmin = user?.role === 'ADMINISTRATOR' || user?.role === 'ADMIN';
-
-        if (isAdmin) {
+        if (isUserAdmin()) {
             return [...commonItems.slice(0, 1), ...adminOnlyItems, ...commonItems.slice(1)];
         }
         return commonItems;
@@ -53,12 +59,18 @@ const AdminPanel = () => {
     // Función para obtener el nombre de visualización del rol
     const getRoleDisplayName = () => {
         const role = user?.role;
-        if (role === 'ADMINISTRATOR' || role === 'ADMIN') {
+        if (!role) return 'Usuario';
+
+        const normalizedRole = role.toUpperCase();
+
+        if (normalizedRole === 'ADMINISTRATOR' || normalizedRole === 'ADMIN') {
             return 'Administrador';
-        } else if (role === 'EMPLOYEE' || role === 'EMPLEADO') {
+        } else if (normalizedRole === 'EMPLOYEE' || normalizedRole === 'EMPLEADO') {
             return 'Empleado';
         }
-        return role || 'Usuario';
+
+        // Capitalizar primera letra para roles desconocidos
+        return role.charAt(0).toUpperCase() + role.slice(1).toLowerCase();
     };
 
     // Función para obtener las iniciales del usuario
@@ -90,10 +102,21 @@ const AdminPanel = () => {
         { nombre: 'Lijadora Orbital', prestamos: 28 }
     ];
 
-    const isAdmin = user?.role === 'ADMINISTRATOR' || user?.role === 'ADMIN';
+    const isAdmin = isUserAdmin();
 
     return (
         <div className="min-h-screen bg-gray-900 flex">
+            {/* Debug info - solo en desarrollo */}
+            {process.env.NODE_ENV === 'development' && (
+                <div className="fixed top-4 right-4 bg-gray-800 p-3 rounded text-xs z-50 max-w-xs">
+                    <div className="text-gray-400 mb-1">Debug - User Info:</div>
+                    <div className="text-gray-300">Username: {user?.username || 'N/A'}</div>
+                    <div className="text-gray-300">Raw Role: {user?.role || 'N/A'}</div>
+                    <div className="text-gray-300">Is Admin: {isAdmin ? 'SÍ' : 'NO'}</div>
+                    <div className="text-gray-300">Display Name: {getRoleDisplayName()}</div>
+                </div>
+            )}
+
             {/* Sidebar */}
             <div className="w-80 bg-gray-800 shadow-xl flex flex-col">
                 {/* Header del Sidebar */}
@@ -174,6 +197,12 @@ const AdminPanel = () => {
                                 }`}>
                                     {getRoleDisplayName()}
                                 </span>
+                                {/* Badge adicional para indicar el estado de admin */}
+                                {isAdmin && (
+                                    <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                        Acceso Completo
+                                    </span>
+                                )}
                             </div>
                         </div>
                         <div className="flex items-center space-x-4">

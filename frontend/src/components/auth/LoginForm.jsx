@@ -1,84 +1,88 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
-import { Wrench, Shield, User } from 'lucide-react';
+import { Wrench, Shield } from 'lucide-react';
 
 const LoginForm = () => {
-    const [username, setUsername] = useState('');
-    const [password, setPassword] = useState('');
     const [error, setError] = useState('');
-    const [isProcessingCallback, setIsProcessingCallback] = useState(false);
 
     const {
         login,
         loading,
-        authMode,
-        switchAuthMode,
         systemInfo,
+        systemInfoLoaded,
         canUseKeycloak,
-        handleKeycloakCallback
+        handleKeycloakCallback,
+        callbackInProgress
     } = useAuth();
 
-    // Manejar callback de Keycloak al cargar - SOLO UNA VEZ
+    // Manejar callback de Keycloak
     useEffect(() => {
         const urlParams = new URLSearchParams(window.location.search);
         const code = urlParams.get('code');
+        const state = urlParams.get('state');
         const error = urlParams.get('error');
+        const errorDescription = urlParams.get('error_description');
+
+        // Limpiar URL inmediatamente para evitar reprocesamiento
+        const cleanUrl = () => {
+            window.history.replaceState({}, document.title, window.location.pathname);
+        };
 
         // Mostrar error si viene en la URL
         if (error) {
-            setError(decodeURIComponent(error));
-            // Limpiar la URL
-            window.history.replaceState({}, document.title, '/');
+            let errorMessage = decodeURIComponent(error);
+            if (errorDescription) {
+                errorMessage += ': ' + decodeURIComponent(errorDescription);
+            }
+            setError(errorMessage);
+            cleanUrl();
             return;
         }
 
-        // Procesar código de Keycloak si existe
-        if (code && authMode === 'keycloak' && !isProcessingCallback) {
-            setIsProcessingCallback(true);
-            handleKeycloakCallback(code)
+        // Procesar código de autorización
+        if (code && state && systemInfoLoaded && !callbackInProgress) {
+            console.log('Procesando callback de Keycloak...');
+
+            handleKeycloakCallback(code, state)
                 .then(result => {
                     if (!result.success) {
+                        console.error('Error en callback:', result.error);
                         setError(result.error || 'Error en autenticación Keycloak');
                     }
-                    // Limpiar la URL
-                    window.history.replaceState({}, document.title, '/');
+                    // El éxito se maneja automáticamente por el contexto
                 })
                 .catch(err => {
+                    console.error('Exception en callback:', err);
                     setError('Error procesando callback: ' + err.message);
-                    window.history.replaceState({}, document.title, '/');
                 })
                 .finally(() => {
-                    setIsProcessingCallback(false);
+                    cleanUrl();
                 });
+        } else if (code && !systemInfoLoaded) {
+            // Esperar a que se cargue systemInfo si hay un código pendiente
+            console.log('Código recibido pero systemInfo no cargado, esperando...');
         }
-    }, [authMode, handleKeycloakCallback, isProcessingCallback]);
+    }, [systemInfoLoaded, handleKeycloakCallback, callbackInProgress]);
 
-    const handleSubmit = async (e) => {
-        e.preventDefault();
+    const handleKeycloakLogin = async () => {
         setError('');
 
-        if (authMode === 'legacy' && (!username || !password)) {
-            setError('Por favor completa todos los campos');
+        if (!canUseKeycloak) {
+            setError('Keycloak no está disponible en este sistema');
             return;
         }
 
-        if (authMode === 'keycloak') {
-            // Para Keycloak, no necesitamos username/password aquí
-            const result = await login(null, null, 'keycloak');
-            if (!result.success && !result.redirect) {
-                setError(result.error);
-            }
-            return;
-        }
+        console.log('Iniciando login con Keycloak...');
+        const result = await login();
 
-        const result = await login(username, password, 'legacy');
-        if (!result.success) {
-            setError(result.error);
+        if (!result.success && !result.redirect) {
+            console.error('Error en login Keycloak:', result.error);
+            setError(result.error || 'Error iniciando sesión con Keycloak');
         }
     };
 
-    // Mostrar loading si está procesando callback
-    if (isProcessingCallback) {
+    // Mostrar loading si no se ha cargado systemInfo o si está procesando callback
+    if (!systemInfoLoaded || callbackInProgress) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-900">
                 <div className="text-center">
@@ -86,11 +90,43 @@ const LoginForm = () => {
                         <Shield className="h-12 w-12 text-orange-500 animate-spin" />
                     </div>
                     <h2 className="text-xl font-semibold text-white mb-2">
-                        Procesando autenticación...
+                        {callbackInProgress ? 'Procesando autenticación...' : 'Cargando sistema...'}
                     </h2>
                     <p className="text-gray-400">
-                        Por favor espera mientras validamos tu sesión.
+                        Por favor espera mientras {callbackInProgress ? 'validamos tu sesión' : 'cargamos la configuración'}.
                     </p>
+                </div>
+            </div>
+        );
+    }
+
+    // Si Keycloak no está disponible, mostrar mensaje
+    if (!canUseKeycloak) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-gray-900">
+                <div className="max-w-md w-full space-y-8 p-8">
+                    <div className="text-center">
+                        <div className="flex items-center justify-center mb-6">
+                            <div className="bg-red-600 p-4 rounded-lg mr-4">
+                                <Shield className="h-12 w-12 text-white" />
+                            </div>
+                            <div>
+                                <h1 className="text-3xl font-bold text-white">ToolRent</h1>
+                                <p className="text-gray-400 text-sm">Sistema de Gestión</p>
+                            </div>
+                        </div>
+                        <h2 className="text-2xl font-bold text-white mb-4">
+                            Sistema No Disponible
+                        </h2>
+                        <div className="bg-red-900/20 border border-red-800 p-4 rounded-lg">
+                            <p className="text-red-300">
+                                La autenticación con Keycloak no está habilitada en este sistema.
+                            </p>
+                            <p className="text-red-400 text-sm mt-2">
+                                Contacta al administrador del sistema para configurar Keycloak.
+                            </p>
+                        </div>
+                    </div>
                 </div>
             </div>
         );
@@ -114,125 +150,77 @@ const LoginForm = () => {
                     </h2>
                 </div>
 
-                {/* Selector de modo de autenticación */}
-                {canUseKeycloak && (
-                    <div className="bg-gray-800 p-4 rounded-lg">
-                        <p className="text-gray-300 text-sm mb-3">Método de autenticación:</p>
-                        <div className="flex space-x-2">
-                            <button
-                                type="button"
-                                onClick={() => switchAuthMode('legacy')}
-                                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                                    authMode === 'legacy'
-                                        ? 'bg-orange-600 text-white'
-                                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                                }`}
-                            >
-                                <User className="h-4 w-4 inline mr-2" />
-                                Sistema Local
-                            </button>
-                            <button
-                                type="button"
-                                onClick={() => switchAuthMode('keycloak')}
-                                className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-colors ${
-                                    authMode === 'keycloak'
-                                        ? 'bg-orange-600 text-white'
-                                        : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
-                                }`}
-                            >
-                                <Shield className="h-4 w-4 inline mr-2" />
-                                Keycloak
-                            </button>
-                        </div>
+                {/* Información de Keycloak */}
+                <div className="bg-gray-800 p-4 rounded-lg">
+                    <div className="flex items-center mb-2">
+                        <Shield className="h-5 w-5 text-orange-500 mr-2" />
+                        <span className="text-white font-medium">Autenticación Keycloak</span>
+                    </div>
+                    <p className="text-gray-400 text-sm mb-3">
+                        Serás redirigido al sistema de autenticación seguro de Keycloak.
+                    </p>
+                    {systemInfo?.keycloakUrl && (
+                        <p className="text-gray-500 text-xs">
+                            Servidor: {systemInfo.keycloakUrl}
+                        </p>
+                    )}
+                </div>
+
+                {/* Debug info - solo en desarrollo */}
+                {process.env.NODE_ENV === 'development' && (
+                    <div className="bg-gray-800 p-3 rounded text-xs">
+                        <div className="text-gray-400">Debug Info:</div>
+                        <div className="text-gray-300">SystemInfo loaded: {systemInfoLoaded ? 'SÍ' : 'NO'}</div>
+                        <div className="text-gray-300">Keycloak enabled: {systemInfo?.keycloakEnabled ? 'SÍ' : 'NO'}</div>
+                        <div className="text-gray-300">Keycloak URL: {systemInfo?.keycloakUrl || 'N/A'}</div>
+                        <div className="text-gray-300">Callback in progress: {callbackInProgress ? 'SÍ' : 'NO'}</div>
+                        <div className="text-gray-300">URL params: {window.location.search || 'none'}</div>
                     </div>
                 )}
 
-                <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
-                    {authMode === 'legacy' ? (
-                        // Formulario tradicional
-                        <div className="space-y-4">
-                            <div>
-                                <input
-                                    type="text"
-                                    required
-                                    className="appearance-none relative block w-full px-3 py-3 border border-gray-600 placeholder-gray-400 text-white bg-gray-800 rounded-lg focus:outline-none focus:ring-orange-500 focus:border-orange-500 focus:z-10 sm:text-sm"
-                                    placeholder="Usuario"
-                                    value={username}
-                                    onChange={(e) => setUsername(e.target.value)}
-                                    disabled={loading}
-                                />
-                            </div>
-                            <div>
-                                <input
-                                    type="password"
-                                    required
-                                    className="appearance-none relative block w-full px-3 py-3 border border-gray-600 placeholder-gray-400 text-white bg-gray-800 rounded-lg focus:outline-none focus:ring-orange-500 focus:border-orange-500 focus:z-10 sm:text-sm"
-                                    placeholder="Contraseña"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    disabled={loading}
-                                />
-                            </div>
-                        </div>
-                    ) : (
-                        // Información para Keycloak
-                        <div className="bg-gray-800 p-4 rounded-lg">
-                            <div className="flex items-center mb-2">
-                                <Shield className="h-5 w-5 text-orange-500 mr-2" />
-                                <span className="text-white font-medium">Autenticación Keycloak</span>
-                            </div>
-                            <p className="text-gray-400 text-sm">
-                                Serás redirigido al sistema de autenticación seguro de Keycloak.
-                            </p>
-                            {systemInfo?.keycloakUrl && (
-                                <p className="text-gray-500 text-xs mt-2">
-                                    Servidor: {systemInfo.keycloakUrl}
-                                </p>
-                            )}
-                        </div>
-                    )}
-
-                    {error && (
-                        <div className="text-red-400 text-sm text-center bg-red-900/20 border border-red-800 p-3 rounded-lg">
-                            {error}
-                        </div>
-                    )}
-
-                    <div>
-                        <button
-                            type="submit"
-                            disabled={loading || isProcessingCallback}
-                            className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                            {loading || isProcessingCallback ? (
-                                'Iniciando sesión...'
-                            ) : authMode === 'keycloak' ? (
-                                <>
-                                    <Shield className="h-4 w-4 mr-2" />
-                                    Continuar con Keycloak
-                                </>
-                            ) : (
-                                <>
-                                    <User className="h-4 w-4 mr-2" />
-                                    Iniciar Sesión
-                                </>
-                            )}
-                        </button>
-                    </div>
-                </form>
-
-                {/* Información del sistema */}
-                {systemInfo && (
-                    <div className="text-center text-xs text-gray-500">
-                        <p>Sistema: {systemInfo.keycloakEnabled ? 'Keycloak + Local' : 'Solo Local'}</p>
-                        {authMode === 'legacy' && (
-                            <div className="mt-2 bg-gray-800 p-2 rounded">
-                                <p className="text-gray-400">Usuarios de prueba:</p>
-                                <p className="text-gray-500">Admin: admin / admin | Empleado: employee / emp123</p>
+                {/* Mostrar errores */}
+                {error && (
+                    <div className="text-red-400 text-sm bg-red-900/20 border border-red-800 p-3 rounded-lg">
+                        <div className="font-medium mb-1">Error de autenticación:</div>
+                        <div className="text-red-300">{error}</div>
+                        {error.includes('expiró') && (
+                            <div className="mt-2 text-xs text-red-400">
+                                Tip: Los códigos de autorización solo son válidos por unos minutos.
+                                Intenta iniciar sesión nuevamente.
                             </div>
                         )}
                     </div>
                 )}
+
+                {/* Botón de login */}
+                <div>
+                    <button
+                        type="button"
+                        onClick={handleKeycloakLogin}
+                        disabled={loading || callbackInProgress || !canUseKeycloak}
+                        className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-lg text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                    >
+                        {loading || callbackInProgress ? (
+                            <div className="flex items-center">
+                                <Shield className="h-4 w-4 mr-2 animate-spin" />
+                                Procesando...
+                            </div>
+                        ) : (
+                            <div className="flex items-center">
+                                <Shield className="h-4 w-4 mr-2" />
+                                Continuar con Keycloak
+                            </div>
+                        )}
+                    </button>
+                </div>
+
+                {/* Información adicional */}
+                <div className="text-center text-xs text-gray-500">
+                    <p>Sistema de autenticación: Solo Keycloak</p>
+                    <p className="mt-1">
+                        Utiliza las credenciales configuradas en tu servidor Keycloak
+                    </p>
+                </div>
             </div>
         </div>
     );
