@@ -14,6 +14,7 @@ import {
     AlertTriangle
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
+import InventoryManagement from './InventoryManagement';
 
 const AdminPanel = () => {
     const { user, logout } = useAuth();
@@ -112,7 +113,7 @@ const AdminPanel = () => {
                     <div className="text-gray-400 mb-1">Debug - User Info:</div>
                     <div className="text-gray-300">Username: {user?.username || 'N/A'}</div>
                     <div className="text-gray-300">Raw Role: {user?.role || 'N/A'}</div>
-                    <div className="text-gray-300">Is Admin: {isAdmin ? 'SÍ' : 'NO'}</div>
+                    <div className="text-gray-300">Is Admin: {isAdmin ? 'Sí' : 'NO'}</div>
                     <div className="text-gray-300">Display Name: {getRoleDisplayName()}</div>
                 </div>
             )}
@@ -226,6 +227,7 @@ const AdminPanel = () => {
 
                 {/* Dashboard Content */}
                 <main className="flex-1 p-6 overflow-auto bg-gray-900">
+                    {/* Dashboard */}
                     {activeSection === 'dashboard' && (
                         <div className="space-y-6">
                             {/* Stats Cards */}
@@ -330,18 +332,39 @@ const AdminPanel = () => {
                         </div>
                     )}
 
+                    {/* Gestión de Inventario - Solo para Administradores */}
+                    {activeSection === 'inventario' && isAdmin && (
+                        <InventoryManagement />
+                    )}
+
+                    {/* Mensaje de acceso denegado para inventario */}
+                    {activeSection === 'inventario' && !isAdmin && (
+                        <div className="bg-gray-800 rounded-lg p-8 border border-gray-700 text-center">
+                            <h2 className="text-2xl font-bold text-white mb-4">Gestión de Inventario</h2>
+                            <p className="text-gray-400 mb-4">
+                                No tienes permisos para acceder a esta sección. Solo disponible para Administradores.
+                            </p>
+                            <button
+                                onClick={() => setActiveSection('dashboard')}
+                                className="bg-orange-600 text-white py-2 px-6 rounded-lg hover:bg-orange-700 transition-colors"
+                            >
+                                Volver al Dashboard
+                            </button>
+                        </div>
+                    )}
+
                     {/* Otras secciones */}
-                    {activeSection !== 'dashboard' && (
+                    {activeSection !== 'dashboard' && activeSection !== 'inventario' && (
                         <div className="bg-gray-800 rounded-lg p-8 border border-gray-700 text-center">
                             <h2 className="text-2xl font-bold text-white mb-4">
                                 {getMenuItems().find(item => item.id === activeSection)?.label}
                             </h2>
                             <p className="text-gray-400">
-                                {!isAdmin && ['inventario', 'clientes', 'tarifas', 'kardex', 'usuarios'].includes(activeSection)
+                                {!isAdmin && ['clientes', 'tarifas', 'kardex', 'usuarios'].includes(activeSection)
                                     ? 'No tienes permisos para acceder a esta sección. Solo disponible para Administradores.'
                                     : 'Contenido de la sección en desarrollo...'}
                             </p>
-                            {!isAdmin && ['inventario', 'clientes', 'tarifas', 'kardex', 'usuarios'].includes(activeSection) && (
+                            {!isAdmin && ['clientes', 'tarifas', 'kardex', 'usuarios'].includes(activeSection) && (
                                 <button
                                     onClick={() => setActiveSection('dashboard')}
                                     className="mt-4 bg-orange-600 text-white py-2 px-6 rounded-lg hover:bg-orange-700 transition-colors"

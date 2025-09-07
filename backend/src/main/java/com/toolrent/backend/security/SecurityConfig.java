@@ -34,7 +34,8 @@ public class SecurityConfig {
 
                         // Rutas protegidas - requieren autenticación
                         .requestMatchers("/api/users/**").authenticated()
-                        .requestMatchers("/api/tools/**").authenticated()
+                        .requestMatchers("/api/categories/**").permitAll()
+                        .requestMatchers("/api/tools/**").permitAll()
                         .requestMatchers("/api/loans/**").authenticated()
                         .requestMatchers("/api/clients/**").authenticated()
                         .requestMatchers("/api/reports/**").authenticated()
