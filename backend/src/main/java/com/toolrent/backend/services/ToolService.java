@@ -5,18 +5,23 @@ import com.toolrent.backend.entities.CategoryEntity;
 import com.toolrent.backend.repositories.ToolRepository;
 import com.toolrent.backend.repositories.CategoryRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Optional;
 
 @Service
+@Transactional
 public class ToolService {
 
     private final ToolRepository toolRepository;
     private final CategoryRepository categoryRepository;
+    private final ToolInstanceService toolInstanceService; // AGREGAR ESTA DEPENDENCIA
 
-    public ToolService(ToolRepository toolRepository, CategoryRepository categoryRepository) {
+    public ToolService(ToolRepository toolRepository, CategoryRepository categoryRepository,
+                       ToolInstanceService toolInstanceService) { // AGREGAR AL CONSTRUCTOR
         this.toolRepository = toolRepository;
         this.categoryRepository = categoryRepository;
+        this.toolInstanceService = toolInstanceService; // INICIALIZAR
     }
 
     // Get all tools
@@ -29,7 +34,8 @@ public class ToolService {
         return toolRepository.findById(id);
     }
 
-    // Create new tool (RF1.1 implementation)
+    // Create new tool (RF1.1 implementation) - MODIFICADO
+    @Transactional
     public ToolEntity createTool(ToolEntity tool) {
         // Validate required fields according to business rules
         validateToolForCreation(tool);
@@ -39,6 +45,42 @@ public class ToolService {
 
         // Set current stock equal to initial stock when creating
         tool.setCurrentStock(tool.getInitialStock());
+
+        // Save the tool first
+        ToolEntity savedTool = toolRepository.save(tool);
+
+        // AGREGAR: Create instances automatically based on initial stock
+        try {
+            toolInstanceService.createInstances(savedTool, tool.getInitialStock());
+        } catch (Exception e) {
+            // If instance creation fails, rollback tool creation
+            throw new RuntimeException("Failed to create tool instances: " + e.getMessage());
+        }
+
+        return savedTool;
+    }
+
+    // AGREGAR: Method to add more stock to existing tool
+    @Transactional
+    public ToolEntity addToolStock(Long id, Integer additionalQuantity) {
+        ToolEntity tool = toolRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Tool not found with ID: " + id));
+
+        if (additionalQuantity == null || additionalQuantity <= 0) {
+            throw new RuntimeException("Additional quantity must be greater than 0");
+        }
+
+        // Update stock numbers
+        tool.setInitialStock(tool.getInitialStock() + additionalQuantity);
+        tool.setCurrentStock(tool.getCurrentStock() + additionalQuantity);
+
+        // Create new instances
+        toolInstanceService.createInstances(tool, additionalQuantity);
+
+        // Update status to AVAILABLE if it was DECOMMISSIONED
+        if (tool.getStatus() == ToolEntity.ToolStatus.DECOMMISSIONED) {
+            tool.setStatus(ToolEntity.ToolStatus.AVAILABLE);
+        }
 
         return toolRepository.save(tool);
     }
@@ -74,6 +116,13 @@ public class ToolService {
             throw new RuntimeException("Cannot decommission more units than available in stock");
         }
 
+        // Get available instances and decommission them
+        try {
+            toolInstanceService.decommissionMultipleInstances(id, quantity);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to decommission instances: " + e.getMessage());
+        }
+
         // Reduce stock by the specified quantity
         int newStock = tool.getCurrentStock() - quantity;
         tool.setCurrentStock(newStock);
@@ -95,9 +144,15 @@ public class ToolService {
     }
 
     // Delete tool (physical deletion - use with caution)
+    @Transactional
     public void deleteTool(Long id) {
         ToolEntity tool = toolRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Tool not found with ID: " + id));
+
+        // Delete all instances first
+        toolInstanceService.deleteAllInstancesByTool(id);
+
+        // Then delete the tool
         toolRepository.delete(tool);
     }
 
@@ -131,13 +186,23 @@ public class ToolService {
         return toolRepository.existsByNameIgnoreCase(name);
     }
 
-    // Update tool stock (for loan/return operations)
+    // MODIFICAR: Update tool stock should sync with instances
+    @Transactional
     public ToolEntity updateToolStock(Long id, Integer newStock) {
         ToolEntity tool = toolRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Tool not found with ID: " + id));
 
         if (newStock < 0) {
             throw new RuntimeException("Stock cannot be negative");
+        }
+
+        // Get current available instances count
+        Long currentAvailable = toolInstanceService.getAvailableCount(id);
+
+        if (newStock > currentAvailable) {
+            // Need to create more instances
+            int instancesToCreate = newStock - currentAvailable.intValue();
+            toolInstanceService.createInstances(tool, instancesToCreate);
         }
 
         tool.setCurrentStock(newStock);
@@ -158,6 +223,25 @@ public class ToolService {
                 .orElseThrow(() -> new RuntimeException("Tool not found with ID: " + id));
 
         tool.setStatus(status);
+        return toolRepository.save(tool);
+    }
+
+    // AGREGAR: Method to synchronize stock with actual instances
+    @Transactional
+    public ToolEntity synchronizeStock(Long id) {
+        ToolEntity tool = toolRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Tool not found with ID: " + id));
+
+        Long availableCount = toolInstanceService.getAvailableCount(id);
+        tool.setCurrentStock(availableCount.intValue());
+
+        // Update status based on available instances
+        if (availableCount == 0) {
+            tool.setStatus(ToolEntity.ToolStatus.DECOMMISSIONED);
+        } else {
+            tool.setStatus(ToolEntity.ToolStatus.AVAILABLE);
+        }
+
         return toolRepository.save(tool);
     }
 

@@ -2,356 +2,479 @@ import React, { useState, useEffect } from 'react';
 import {
     Plus,
     Search,
+    Filter,
     Edit3,
     Trash2,
-    Package,
     AlertTriangle,
-    Tags,
-    Hash
+    Package,
+    Wrench,
+    Eye,
+    Settings,
+    RefreshCw,
+    X,
+    Check,
+    Minus,
+    TrendingDown,
+    FileText,
+    Users,
+    Tool,
+    Hash,
+    Clock,
+    DollarSign,
+    Archive,
+    PlusCircle
 } from 'lucide-react';
 
 const InventoryManagement = () => {
-    // Estados principales
+    // State management
     const [tools, setTools] = useState([]);
     const [categories, setCategories] = useState([]);
     const [loading, setLoading] = useState(true);
-
-    // Estados para filtros y búsqueda
+    const [error, setError] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
-    const [selectedCategory, setSelectedCategory] = useState('');
-    const [selectedStatus, setSelectedStatus] = useState('');
-    const [showLowStock, setShowLowStock] = useState(false);
-
-    // Estados para modales
-    const [showAddModal, setShowAddModal] = useState(false);
-    const [showEditModal, setShowEditModal] = useState(false);
-    const [showCategoryModal, setShowCategoryModal] = useState(false);
+    const [statusFilter, setStatusFilter] = useState('ALL');
+    const [categoryFilter, setCategoryFilter] = useState('ALL');
+    const [showModal, setShowModal] = useState(false);
+    const [modalType, setModalType] = useState('');
     const [selectedTool, setSelectedTool] = useState(null);
-
-    // Estados para formularios
-    const [toolForm, setToolForm] = useState({
+    const [formData, setFormData] = useState({
         name: '',
         categoryId: '',
         initialStock: '',
-        replacementValue: ''
-    });
-
-    const [categoryForm, setCategoryForm] = useState({
-        name: '',
+        replacementValue: '',
         description: ''
     });
+    const [stockData, setStockData] = useState({
+        quantity: ''
+    });
 
-    // API Configuration
-    const API_BASE = 'http://localhost:8081/api';
+    // Mock data para pruebas
+    const mockTools = [
+        {
+            id: 1,
+            name: 'Martillo',
+            category: { id: 1, name: 'Herramientas Manuales' },
+            currentStock: 5,
+            initialStock: 10,
+            replacementValue: 25.50,
+            status: 'AVAILABLE',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        },
+        {
+            id: 2,
+            name: 'Destornillador',
+            category: { id: 1, name: 'Herramientas Manuales' },
+            currentStock: 0,
+            initialStock: 15,
+            replacementValue: 12.75,
+            status: 'LOANED',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        }
+    ];
+
+    const mockCategories = [
+        { id: 1, name: 'Herramientas Manuales' },
+        { id: 2, name: 'Herramientas Eléctricas' }
+    ];
+
+    // API Base URL - configurable
+    const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:8081/api';
+
+    // Estados de herramientas
+    const TOOL_STATUS = {
+        AVAILABLE: { label: 'Disponible', color: 'bg-green-100 text-green-800', icon: Package },
+        LOANED: { label: 'Todas Prestadas', color: 'bg-yellow-100 text-yellow-800', icon: Users },
+        DECOMMISSIONED: { label: 'Dada de Baja', color: 'bg-red-100 text-red-800', icon: TrendingDown }
+    };
 
     // Cargar datos iniciales
     useEffect(() => {
-        loadData();
+        loadInitialData();
     }, []);
 
-    const loadData = async () => {
+    const loadInitialData = async () => {
         setLoading(true);
-        try {
-            const [toolsRes, categoriesRes] = await Promise.all([
-                fetch(`${API_BASE}/tools`),
-                fetch(`${API_BASE}/categories`)
-            ]);
+        setError(null);
 
-            if (toolsRes.ok) setTools(await toolsRes.json());
-            if (categoriesRes.ok) setCategories(await categoriesRes.json());
+        try {
+            console.log('Cargando datos iniciales...');
+
+            // Intentar cargar desde API primero
+            try {
+                await Promise.all([
+                    loadTools(),
+                    loadCategories()
+                ]);
+                console.log('Datos cargados desde API exitosamente');
+            } catch (apiError) {
+                console.warn('Error al cargar desde API, usando datos mock:', apiError);
+                // Fallback a datos mock
+                setTools(mockTools);
+                setCategories(mockCategories);
+            }
         } catch (error) {
-            console.error('Error loading data:', error);
+            console.error('Error loading initial data:', error);
+            setError('Error al cargar los datos: ' + error.message);
+            // Usar datos mock como último recurso
+            setTools(mockTools);
+            setCategories(mockCategories);
+        } finally {
+            setLoading(false);
         }
-        setLoading(false);
     };
 
-    // Filtrar herramientas
-    const filteredTools = tools.filter(tool => {
-        const matchesSearch = tool.name?.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesCategory = !selectedCategory || tool.category?.id?.toString() === selectedCategory;
-        const matchesStatus = !selectedStatus || tool.status === selectedStatus;
-        const matchesLowStock = !showLowStock || (tool.currentStock <= 5);
+    const loadTools = async () => {
+        try {
+            console.log('Intentando cargar herramientas desde:', `${API_BASE}/tools`);
+            const response = await fetch(`${API_BASE}/tools`);
 
-        return matchesSearch && matchesCategory && matchesStatus && matchesLowStock;
-    });
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
 
-    // Crear herramienta
-    const handleCreateTool = async (e) => {
+            const data = await response.json();
+            console.log('Herramientas cargadas:', data);
+            setTools(data);
+        } catch (error) {
+            console.error('Error loading tools:', error);
+            throw error;
+        }
+    };
+
+    const loadCategories = async () => {
+        try {
+            console.log('Intentando cargar categorías desde:', `${API_BASE}/categories`);
+            const response = await fetch(`${API_BASE}/categories`);
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            console.log('Categorías cargadas:', data);
+            setCategories(data);
+        } catch (error) {
+            console.error('Error loading categories:', error);
+            throw error;
+        }
+    };
+
+    // Filtrar herramientas con validación
+    const filteredTools = React.useMemo(() => {
+        if (!Array.isArray(tools)) {
+            console.warn('Tools is not an array:', tools);
+            return [];
+        }
+
+        return tools.filter(tool => {
+            if (!tool) return false;
+
+            const matchesSearch = !searchTerm ||
+                (tool.name && tool.name.toLowerCase().includes(searchTerm.toLowerCase()));
+            const matchesStatus = statusFilter === 'ALL' || tool.status === statusFilter;
+            const matchesCategory = categoryFilter === 'ALL' ||
+                (tool.category && tool.category.id.toString() === categoryFilter);
+
+            return matchesSearch && matchesStatus && matchesCategory;
+        });
+    }, [tools, searchTerm, statusFilter, categoryFilter]);
+
+    // Manejar creación de herramienta
+    const handleToolSubmit = async (e) => {
         e.preventDefault();
-        const categoryObj = categories.find(cat => cat.id.toString() === toolForm.categoryId);
-
-        const toolData = {
-            name: toolForm.name,
-            category: categoryObj,
-            initialStock: parseInt(toolForm.initialStock),
-            replacementValue: parseFloat(toolForm.replacementValue)
-        };
 
         try {
+            const selectedCategory = categories.find(cat => cat.id.toString() === formData.categoryId);
+
+            if (!selectedCategory) {
+                setError('Debe seleccionar una categoría válida');
+                return;
+            }
+
+            const payload = {
+                name: formData.name.trim(),
+                category: selectedCategory,
+                initialStock: parseInt(formData.initialStock) || 0,
+                replacementValue: parseFloat(formData.replacementValue) || 0
+            };
+
+            console.log('Enviando payload:', payload);
+
             const response = await fetch(`${API_BASE}/tools`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(toolData)
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload),
             });
 
             if (response.ok) {
-                const newTool = await response.json();
-                setTools(prev => [...prev, newTool]);
-                setShowAddModal(false);
-                resetToolForm();
+                await loadTools();
+                closeModal();
+            } else {
+                const errorText = await response.text();
+                setError('Error al crear herramienta: ' + errorText);
             }
         } catch (error) {
             console.error('Error creating tool:', error);
+            setError('Error de conexión al crear la herramienta');
         }
     };
 
-    // Actualizar herramienta
-    const handleEditTool = async (e) => {
-        e.preventDefault();
-        const categoryObj = categories.find(cat => cat.id.toString() === toolForm.categoryId);
+    // Abrir modal
+    const openModal = (type, tool = null) => {
+        console.log('Abriendo modal:', type, tool);
+        setModalType(type);
+        setShowModal(true);
+        setError(null);
 
-        const toolData = {
-            name: toolForm.name,
-            category: categoryObj,
-            initialStock: parseInt(toolForm.initialStock),
-            replacementValue: parseFloat(toolForm.replacementValue)
-        };
-
-        try {
-            const response = await fetch(`${API_BASE}/tools/${selectedTool.id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(toolData)
+        if (type === 'create') {
+            setFormData({
+                name: '',
+                categoryId: '',
+                initialStock: '',
+                replacementValue: '',
+                description: ''
             });
-
-            if (response.ok) {
-                const updatedTool = await response.json();
-                setTools(prev => prev.map(tool => tool.id === selectedTool.id ? updatedTool : tool));
-                setShowEditModal(false);
-                setSelectedTool(null);
-                resetToolForm();
-            }
-        } catch (error) {
-            console.error('Error updating tool:', error);
-        }
-    };
-
-    // Eliminar herramienta
-    const handleDeleteTool = async (toolId) => {
-        if (!confirm('¿Eliminar esta herramienta?')) return;
-
-        try {
-            const response = await fetch(`${API_BASE}/tools/${toolId}`, {
-                method: 'DELETE'
+        } else if (type === 'edit' && tool) {
+            setSelectedTool(tool);
+            setFormData({
+                name: tool.name || '',
+                categoryId: tool.category?.id?.toString() || '',
+                initialStock: tool.initialStock?.toString() || '',
+                replacementValue: tool.replacementValue?.toString() || '',
+                description: ''
             });
-
-            if (response.ok) {
-                setTools(prev => prev.filter(tool => tool.id !== toolId));
-            }
-        } catch (error) {
-            console.error('Error deleting tool:', error);
+        } else if (type === 'details' && tool) {
+            setSelectedTool(tool);
         }
     };
 
-    // Crear categoría
-    const handleCreateCategory = async (e) => {
-        e.preventDefault();
-        try {
-            const response = await fetch(`${API_BASE}/categories`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    name: categoryForm.name,
-                    description: categoryForm.description
-                })
-            });
-
-            if (response.ok) {
-                const newCategory = await response.json();
-                setCategories(prev => [...prev, newCategory]);
-                setShowCategoryModal(false);
-                resetCategoryForm();
-            }
-        } catch (error) {
-            console.error('Error creating category:', error);
-        }
-    };
-
-    // Actualizar stock
-    const handleUpdateStock = async (toolId, newStock) => {
-        try {
-            const response = await fetch(`${API_BASE}/tools/${toolId}/stock?stock=${newStock}`, {
-                method: 'PUT'
-            });
-
-            if (response.ok) {
-                const updatedTool = await response.json();
-                setTools(prev => prev.map(tool => tool.id === toolId ? updatedTool : tool));
-            }
-        } catch (error) {
-            console.error('Error updating stock:', error);
-        }
-    };
-
-    // Actualizar estado
-    const handleUpdateStatus = async (toolId, newStatus) => {
-        try {
-            const response = await fetch(`${API_BASE}/tools/${toolId}/status?status=${newStatus}`, {
-                method: 'PUT'
-            });
-
-            if (response.ok) {
-                const updatedTool = await response.json();
-                setTools(prev => prev.map(tool => tool.id === toolId ? updatedTool : tool));
-            }
-        } catch (error) {
-            console.error('Error updating status:', error);
-        }
-    };
-
-    // Funciones auxiliares
-    const resetToolForm = () => {
-        setToolForm({ name: '', categoryId: '', initialStock: '', replacementValue: '' });
-    };
-
-    const resetCategoryForm = () => {
-        setCategoryForm({ name: '', description: '' });
-    };
-
-    const openEditModal = (tool) => {
-        setSelectedTool(tool);
-        setToolForm({
-            name: tool.name || '',
-            categoryId: tool.category?.id?.toString() || '',
-            initialStock: tool.initialStock?.toString() || '',
-            replacementValue: tool.replacementValue?.toString() || ''
+    const closeModal = () => {
+        setShowModal(false);
+        setModalType('');
+        setSelectedTool(null);
+        setFormData({
+            name: '',
+            categoryId: '',
+            initialStock: '',
+            replacementValue: '',
+            description: ''
         });
-        setShowEditModal(true);
+        setStockData({ quantity: '' });
+        setError(null);
     };
 
-    const getStatusColor = (status) => {
-        switch (status) {
-            case 'AVAILABLE': return 'bg-green-100 text-green-800';
-            case 'LOANED': return 'bg-blue-100 text-blue-800';
-            case 'UNDER_REPAIR': return 'bg-yellow-100 text-yellow-800';
-            case 'DECOMMISSIONED': return 'bg-red-100 text-red-800';
-            default: return 'bg-gray-100 text-gray-800';
-        }
-    };
+    // Obtener estadísticas con validación
+    const getToolStats = React.useMemo(() => {
+        if (!Array.isArray(tools)) return { total: 0, available: 0, loaned: 0, decommissioned: 0, lowStock: 0, totalValue: 0, totalUnits: 0 };
 
-    const getStatusText = (status) => {
-        switch (status) {
-            case 'AVAILABLE': return 'Disponible';
-            case 'LOANED': return 'Prestado';
-            case 'UNDER_REPAIR': return 'En Reparación';
-            case 'DECOMMISSIONED': return 'Dado de Baja';
-            default: return status;
-        }
-    };
+        const total = tools.length;
+        const available = tools.filter(t => t && t.status === 'AVAILABLE').length;
+        const loaned = tools.filter(t => t && t.status === 'LOANED').length;
+        const decommissioned = tools.filter(t => t && t.status === 'DECOMMISSIONED').length;
+        const lowStock = tools.filter(t => t && t.currentStock <= 2 && t.currentStock > 0).length;
+        const totalValue = tools.reduce((sum, tool) => {
+            if (!tool) return sum;
+            return sum + ((tool.replacementValue || 0) * (tool.initialStock || 0));
+        }, 0);
+        const totalUnits = tools.reduce((sum, tool) => {
+            if (!tool) return sum;
+            return sum + (tool.initialStock || 0);
+        }, 0);
 
+        return { total, available, loaned, decommissioned, lowStock, totalValue, totalUnits };
+    }, [tools]);
+
+    // Renderizado condicional para debugging
     if (loading) {
         return (
-            <div className="flex justify-center items-center h-64">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500"></div>
-                <span className="ml-4 text-white">Cargando inventario...</span>
+            <div className="flex items-center justify-center h-64 bg-gray-900">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
+                <span className="ml-2 text-gray-400">Cargando herramientas...</span>
             </div>
         );
     }
 
     return (
-        <div className="space-y-6">
+        <div className="space-y-6 bg-gray-900 min-h-screen p-6">
+            {/* Debug Info */}
+            <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                <h3 className="text-sm font-medium text-yellow-400 mb-2">Debug Info</h3>
+                <div className="text-xs text-gray-400 space-y-1">
+                    <div>API Base: {API_BASE}</div>
+                    <div>Tools count: {Array.isArray(tools) ? tools.length : 'Not array'}</div>
+                    <div>Categories count: {Array.isArray(categories) ? categories.length : 'Not array'}</div>
+                    <div>Filtered tools: {filteredTools.length}</div>
+                </div>
+            </div>
+
+            {/* Error Message */}
+            {error && (
+                <div className="bg-red-800 border border-red-600 text-red-100 px-4 py-3 rounded-lg mb-4">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                            <AlertTriangle className="h-5 w-5 mr-2" />
+                            {error}
+                        </div>
+                        <button
+                            onClick={() => setError(null)}
+                            className="text-red-300 hover:text-red-100"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Header */}
             <div className="flex justify-between items-center">
                 <div>
-                    <h2 className="text-2xl font-bold text-white">Gestión de Inventario</h2>
-                    <p className="text-gray-400">
-                        Administra herramientas y categorías • {tools.length} herramientas • {categories.length} categorías
-                    </p>
+                    <h2 className="text-2xl font-bold text-white">Gestión de Herramientas</h2>
+                    <p className="text-gray-400 mt-1">Administrar herramientas del inventario</p>
                 </div>
-                <div className="flex space-x-3">
-                    <button
-                        onClick={() => setShowCategoryModal(true)}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors flex items-center"
-                    >
-                        <Tags className="h-4 w-4 mr-2" />
-                        Nueva Categoría
-                    </button>
-                    <button
-                        onClick={() => setShowAddModal(true)}
-                        className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors flex items-center"
-                    >
-                        <Plus className="h-4 w-4 mr-2" />
-                        Nueva Herramienta
-                    </button>
+                <button
+                    onClick={() => openModal('create')}
+                    className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors"
+                >
+                    <Plus className="h-4 w-4 mr-2" />
+                    Nueva Herramienta
+                </button>
+            </div>
+
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-7 gap-4">
+                <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm text-gray-400">Total Herramientas</p>
+                            <p className="text-xl font-bold text-white">{getToolStats.total}</p>
+                        </div>
+                        <Tool className="h-6 w-6 text-blue-500" />
+                    </div>
+                </div>
+
+                <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm text-gray-400">Disponibles</p>
+                            <p className="text-xl font-bold text-white">{getToolStats.available}</p>
+                        </div>
+                        <Package className="h-6 w-6 text-green-500" />
+                    </div>
+                </div>
+
+                <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm text-gray-400">Agotadas</p>
+                            <p className="text-xl font-bold text-white">{getToolStats.loaned}</p>
+                        </div>
+                        <Users className="h-6 w-6 text-yellow-500" />
+                    </div>
+                </div>
+
+                <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm text-gray-400">De Baja</p>
+                            <p className="text-xl font-bold text-white">{getToolStats.decommissioned}</p>
+                        </div>
+                        <TrendingDown className="h-6 w-6 text-red-500" />
+                    </div>
+                </div>
+
+                <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm text-gray-400">Stock Bajo</p>
+                            <p className="text-xl font-bold text-white">{getToolStats.lowStock}</p>
+                        </div>
+                        <AlertTriangle className="h-6 w-6 text-red-500" />
+                    </div>
+                </div>
+
+                <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm text-gray-400">Unidades Totales</p>
+                            <p className="text-xl font-bold text-white">{getToolStats.totalUnits}</p>
+                        </div>
+                        <Hash className="h-6 w-6 text-purple-500" />
+                    </div>
+                </div>
+
+                <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm text-gray-400">Valor Total</p>
+                            <p className="text-xl font-bold text-white">${getToolStats.totalValue.toLocaleString()}</p>
+                        </div>
+                        <DollarSign className="h-6 w-6 text-green-500" />
+                    </div>
                 </div>
             </div>
 
-            {/* Filtros y Búsqueda */}
-            <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                    <div className="relative">
-                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-                        <input
-                            type="text"
-                            placeholder="Buscar herramientas..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            className="pl-10 pr-4 py-2 w-full bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-orange-500"
-                        />
+            {/* Filters and Search */}
+            <div className="bg-gray-800 p-4 rounded-lg border border-gray-700">
+                <div className="flex flex-wrap gap-4">
+                    {/* Search */}
+                    <div className="flex-1 min-w-64">
+                        <div className="relative">
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+                            <input
+                                type="text"
+                                placeholder="Buscar herramientas por nombre..."
+                                className="pl-10 pr-4 py-2 w-full bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-orange-500"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
                     </div>
 
+                    {/* Status Filter */}
                     <select
-                        value={selectedCategory}
-                        onChange={(e) => setSelectedCategory(e.target.value)}
-                        className="bg-gray-700 border border-gray-600 rounded-lg text-white px-3 py-2 focus:outline-none focus:border-orange-500"
+                        className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-orange-500"
+                        value={statusFilter}
+                        onChange={(e) => setStatusFilter(e.target.value)}
                     >
-                        <option value="">Todas las categorías</option>
-                        {categories.map(category => (
-                            <option key={category.id} value={category.id}>{category.name}</option>
+                        <option value="ALL">Todos los estados</option>
+                        <option value="AVAILABLE">Disponible</option>
+                        <option value="LOANED">Agotadas</option>
+                        <option value="DECOMMISSIONED">Dadas de Baja</option>
+                    </select>
+
+                    {/* Category Filter */}
+                    <select
+                        className="px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-orange-500"
+                        value={categoryFilter}
+                        onChange={(e) => setCategoryFilter(e.target.value)}
+                    >
+                        <option value="ALL">Todas las categorías</option>
+                        {Array.isArray(categories) && categories.map(category => (
+                            <option key={category.id} value={category.id.toString()}>
+                                {category.name}
+                            </option>
                         ))}
                     </select>
 
-                    <select
-                        value={selectedStatus}
-                        onChange={(e) => setSelectedStatus(e.target.value)}
-                        className="bg-gray-700 border border-gray-600 rounded-lg text-white px-3 py-2 focus:outline-none focus:border-orange-500"
-                    >
-                        <option value="">Todos los estados</option>
-                        <option value="AVAILABLE">Disponible</option>
-                        <option value="LOANED">Prestado</option>
-                        <option value="UNDER_REPAIR">En Reparación</option>
-                        <option value="DECOMMISSIONED">Dado de Baja</option>
-                    </select>
-
-                    <label className="flex items-center text-white">
-                        <input
-                            type="checkbox"
-                            checked={showLowStock}
-                            onChange={(e) => setShowLowStock(e.target.checked)}
-                            className="mr-2"
-                        />
-                        Stock bajo
-                    </label>
-
                     <button
-                        onClick={() => {
-                            setSearchTerm('');
-                            setSelectedCategory('');
-                            setSelectedStatus('');
-                            setShowLowStock(false);
-                        }}
-                        className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-500 transition-colors"
+                        onClick={loadInitialData}
+                        className="px-3 py-2 bg-gray-700 hover:bg-gray-600 border border-gray-600 rounded-lg text-white transition-colors"
+                        title="Actualizar"
                     >
-                        Limpiar
+                        <RefreshCw className="h-4 w-4" />
                     </button>
                 </div>
             </div>
 
-            {/* Tabla de herramientas */}
+            {/* Tools Table */}
             <div className="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
                 <div className="overflow-x-auto">
-                    <table className="min-w-full">
-                        <thead className="bg-gray-700">
+                    <table className="w-full">
+                        <thead className="bg-gray-750">
                         <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                                 Herramienta
@@ -366,309 +489,208 @@ const InventoryManagement = () => {
                                 Estado
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
-                                Valor
+                                Valor Unit.
                             </th>
-                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-300 uppercase tracking-wider">
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                Valor Total
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                                 Acciones
                             </th>
                         </tr>
                         </thead>
-                        <tbody className="bg-gray-800 divide-y divide-gray-700">
-                        {filteredTools.map((tool) => (
-                            <tr key={tool.id} className="hover:bg-gray-700 transition-colors">
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    <div className="flex items-center">
-                                        <div className="bg-gray-600 p-2 rounded-lg mr-3">
-                                            <Package className="h-5 w-5 text-white" />
-                                        </div>
-                                        <div>
-                                            <div className="text-sm font-medium text-white">{tool.name}</div>
-                                            <div className="text-sm text-gray-400">ID: {tool.id}</div>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                                            {tool.category?.name || 'Sin categoría'}
-                                        </span>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    <div className="flex items-center">
-                                        <div className="text-sm text-white">{tool.currentStock}/{tool.initialStock}</div>
-                                        {tool.currentStock <= 5 && (
-                                            <AlertTriangle className="h-4 w-4 text-yellow-500 ml-2" />
-                                        )}
-                                    </div>
-                                    <div className="w-full bg-gray-600 rounded-full h-1 mt-1">
-                                        <div
-                                            className={`h-1 rounded-full ${
-                                                tool.currentStock <= 5 ? 'bg-red-500' : 'bg-green-500'
-                                            }`}
-                                            style={{
-                                                width: `${Math.min((tool.currentStock / tool.initialStock) * 100, 100)}%`
-                                            }}
-                                        ></div>
-                                    </div>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap">
-                                    <select
-                                        value={tool.status}
-                                        onChange={(e) => handleUpdateStatus(tool.id, e.target.value)}
-                                        className={`text-xs px-2 py-1 rounded-full font-medium border-0 cursor-pointer ${getStatusColor(tool.status)}`}
-                                    >
-                                        <option value="AVAILABLE">Disponible</option>
-                                        <option value="LOANED">Prestado</option>
-                                        <option value="UNDER_REPAIR">En Reparación</option>
-                                        <option value="DECOMMISSIONED">Dado de Baja</option>
-                                    </select>
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-white">
-                                    ${tool.replacementValue?.toFixed(2) || '0.00'}
-                                </td>
-                                <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                                    <div className="flex justify-end space-x-2">
-                                        <button
-                                            onClick={() => openEditModal(tool)}
-                                            className="text-blue-400 hover:text-blue-300 transition-colors"
-                                            title="Editar"
-                                        >
-                                            <Edit3 className="h-4 w-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => {
-                                                const newStock = prompt('Nuevo stock:', tool.currentStock);
-                                                if (newStock !== null && !isNaN(newStock)) {
-                                                    handleUpdateStock(tool.id, parseInt(newStock));
-                                                }
-                                            }}
-                                            className="text-green-400 hover:text-green-300 transition-colors"
-                                            title="Actualizar Stock"
-                                        >
-                                            <Hash className="h-4 w-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => handleDeleteTool(tool.id)}
-                                            className="text-red-400 hover:text-red-300 transition-colors"
-                                            title="Eliminar"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </button>
-                                    </div>
+                        <tbody className="divide-y divide-gray-700">
+                        {Array.isArray(filteredTools) && filteredTools.length > 0 ? (
+                            filteredTools.map((tool) => {
+                                if (!tool) return null;
+
+                                const status = TOOL_STATUS[tool.status] || TOOL_STATUS.AVAILABLE;
+                                const StatusIcon = status.icon;
+                                const totalValue = (tool.replacementValue || 0) * (tool.initialStock || 0);
+
+                                return (
+                                    <tr key={tool.id} className="hover:bg-gray-750">
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center">
+                                                <Tool className="h-5 w-5 text-gray-400 mr-3" />
+                                                <div>
+                                                    <div className="text-sm font-medium text-white">
+                                                        {tool.name || 'Sin nombre'}
+                                                    </div>
+                                                    <div className="text-sm text-gray-400">
+                                                        ID: {tool.id}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="text-sm text-gray-300">
+                                                {tool.category?.name || 'Sin categoría'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="text-sm text-white">
+                                                <span className={tool.currentStock <= 2 ? 'text-red-400' : 'text-white'}>
+                                                    {tool.currentStock || 0}
+                                                </span>
+                                                <span className="text-gray-400"> / {tool.initialStock || 0}</span>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${status.color}`}>
+                                                <StatusIcon className="h-3 w-3 mr-1" />
+                                                {status.label}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="text-sm text-gray-300">
+                                                ${(tool.replacementValue || 0).toLocaleString()}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="text-sm text-white font-medium">
+                                                ${totalValue.toLocaleString()}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center space-x-2">
+                                                <button
+                                                    onClick={() => openModal('details', tool)}
+                                                    className="text-blue-400 hover:text-blue-300 transition-colors"
+                                                    title="Ver detalles"
+                                                >
+                                                    <Eye className="h-4 w-4" />
+                                                </button>
+                                                <button
+                                                    onClick={() => openModal('edit', tool)}
+                                                    className="text-green-400 hover:text-green-300 transition-colors"
+                                                    title="Editar"
+                                                >
+                                                    <Edit3 className="h-4 w-4" />
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                );
+                            })
+                        ) : (
+                            <tr>
+                                <td colSpan={7} className="px-6 py-8 text-center text-gray-400">
+                                    No se encontraron herramientas
                                 </td>
                             </tr>
-                        ))}
+                        )}
                         </tbody>
                     </table>
-                    {filteredTools.length === 0 && (
-                        <div className="text-center py-8 text-gray-400">
-                            No se encontraron herramientas con los filtros aplicados
-                        </div>
-                    )}
                 </div>
             </div>
 
-            {/* Modal para agregar herramienta */}
-            {showAddModal && (
+            {/* Modal */}
+            {showModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md border border-gray-700">
-                        <h3 className="text-lg font-semibold text-white mb-4">Nueva Herramienta</h3>
-                        <form onSubmit={handleCreateTool} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-1">Nombre *</label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={toolForm.name}
-                                    onChange={(e) => setToolForm({...toolForm, name: e.target.value})}
-                                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-1">Categoría *</label>
-                                <select
-                                    required
-                                    value={toolForm.categoryId}
-                                    onChange={(e) => setToolForm({...toolForm, categoryId: e.target.value})}
-                                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500"
-                                >
-                                    <option value="">Seleccionar categoría</option>
-                                    {categories.map(category => (
-                                        <option key={category.id} value={category.id}>{category.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-1">Stock Inicial *</label>
-                                <input
-                                    type="number"
-                                    required
-                                    min="1"
-                                    value={toolForm.initialStock}
-                                    onChange={(e) => setToolForm({...toolForm, initialStock: e.target.value})}
-                                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-1">Valor de Reposición *</label>
-                                <input
-                                    type="number"
-                                    required
-                                    min="0"
-                                    step="0.01"
-                                    value={toolForm.replacementValue}
-                                    onChange={(e) => setToolForm({...toolForm, replacementValue: e.target.value})}
-                                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500"
-                                />
-                            </div>
-                            <div className="flex justify-end space-x-3 pt-4">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setShowAddModal(false);
-                                        resetToolForm();
-                                    }}
-                                    className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-500 transition-colors"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors"
-                                >
-                                    Crear
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
+                    <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md border border-gray-700 max-h-[90vh] overflow-y-auto">
+                        {/* Modal Header */}
+                        <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold text-white">
+                                {modalType === 'create' && 'Registrar Nueva Herramienta'}
+                                {modalType === 'edit' && 'Editar Herramienta'}
+                                {modalType === 'details' && 'Detalles de la Herramienta'}
+                            </h3>
+                            <button
+                                onClick={closeModal}
+                                className="text-gray-400 hover:text-white transition-colors"
+                            >
+                                <X className="h-5 w-5" />
+                            </button>
+                        </div>
 
-            {/* Modal para editar herramienta */}
-            {showEditModal && selectedTool && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md border border-gray-700">
-                        <h3 className="text-lg font-semibold text-white mb-4">Editar Herramienta</h3>
-                        <form onSubmit={handleEditTool} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-1">Nombre *</label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={toolForm.name}
-                                    onChange={(e) => setToolForm({...toolForm, name: e.target.value})}
-                                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-1">Categoría *</label>
-                                <select
-                                    required
-                                    value={toolForm.categoryId}
-                                    onChange={(e) => setToolForm({...toolForm, categoryId: e.target.value})}
-                                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500"
-                                >
-                                    <option value="">Seleccionar categoría</option>
-                                    {categories.map(category => (
-                                        <option key={category.id} value={category.id}>{category.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-1">Stock Inicial *</label>
-                                <input
-                                    type="number"
-                                    required
-                                    min="1"
-                                    value={toolForm.initialStock}
-                                    onChange={(e) => setToolForm({...toolForm, initialStock: e.target.value})}
-                                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-1">Valor de Reposición *</label>
-                                <input
-                                    type="number"
-                                    required
-                                    min="0"
-                                    step="0.01"
-                                    value={toolForm.replacementValue}
-                                    onChange={(e) => setToolForm({...toolForm, replacementValue: e.target.value})}
-                                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500"
-                                />
-                            </div>
-                            <div className="flex justify-end space-x-3 pt-4">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setShowEditModal(false);
-                                        setSelectedTool(null);
-                                        resetToolForm();
-                                    }}
-                                    className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-500 transition-colors"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors"
-                                >
-                                    Actualizar
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
+                        {/* Modal Content */}
+                        {(modalType === 'create' || modalType === 'edit') && (
+                            <form onSubmit={handleToolSubmit} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-1">
+                                        Nombre *
+                                    </label>
+                                    <input
+                                        type="text"
+                                        required
+                                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-orange-500"
+                                        value={formData.name}
+                                        onChange={(e) => setFormData({...formData, name: e.target.value})}
+                                    />
+                                </div>
 
-            {/* Modal para agregar categoría */}
-            {showCategoryModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md border border-gray-700">
-                        <h3 className="text-lg font-semibold text-white mb-4">Nueva Categoría</h3>
-                        <form onSubmit={handleCreateCategory} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-1">Nombre *</label>
-                                <input
-                                    type="text"
-                                    required
-                                    value={categoryForm.name}
-                                    onChange={(e) => setCategoryForm({...categoryForm, name: e.target.value})}
-                                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500"
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-1">Descripción</label>
-                                <textarea
-                                    value={categoryForm.description}
-                                    onChange={(e) => setCategoryForm({...categoryForm, description: e.target.value})}
-                                    className="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-orange-500"
-                                    rows="3"
-                                />
-                            </div>
-                            <div className="flex justify-end space-x-3 pt-4">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setShowCategoryModal(false);
-                                        resetCategoryForm();
-                                    }}
-                                    className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-500 transition-colors"
-                                >
-                                    Cancelar
-                                </button>
-                                <button
-                                    type="submit"
-                                    className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors"
-                                >
-                                    Crear
-                                </button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
-        </div>
-    );
-};
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-1">
+                                        Categoría *
+                                    </label>
+                                    <select
+                                        required
+                                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-orange-500"
+                                        value={formData.categoryId}
+                                        onChange={(e) => setFormData({...formData, categoryId: e.target.value})}
+                                    >
+                                        <option value="">Seleccionar categoría</option>
+                                        {Array.isArray(categories) && categories.map(category => (
+                                            <option key={category.id} value={category.id.toString()}>
+                                                {category.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
 
-export default InventoryManagement;
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-1">
+                                        Stock Inicial *
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        required
+                                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-orange-500"
+                                        value={formData.initialStock}
+                                        onChange={(e) => setFormData({...formData, initialStock: e.target.value})}
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-300 mb-1">
+                                        Valor de Reposición *
+                                    </label>
+                                    <input
+                                        type="number"
+                                        min="0"
+                                        step="0.01"
+                                        required
+                                        className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-orange-500"
+                                        value={formData.replacementValue}
+                                        onChange={(e) => setFormData({...formData, replacementValue: e.target.value})}
+                                    />
+                                </div>
+
+                                <div className="flex justify-end space-x-3 pt-4">
+                                    <button
+                                        type="button"
+                                        onClick={closeModal}
+                                        className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        className="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg transition-colors"
+                                    >
+                                        {modalType === 'create' ? 'Registrar' : 'Actualizar'}
+                                    </button>
+                                </div>
+                            </form>
+                        )}
+
+                        {modalType === 'details' && selectedTool && (
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-1 gap-4">
+                                    <div className="bg-gray-700 p-4 rounded-lg">
+                                        <h4 className="text-sm font-medium text-gray-300 mb-2">Información General</h4>
+                                        <div className="space-y-2">
+                                            <div className="flex justify-between">
+                                                <span className="text-sm text-gray-400">ID:</span>

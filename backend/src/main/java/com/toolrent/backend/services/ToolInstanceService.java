@@ -183,6 +183,28 @@ public class ToolInstanceService {
         toolInstanceRepository.deleteByToolId(toolId);
     }
 
+    // Decommission multiple instances (for bulk operations)
+    @Transactional
+    public List<ToolInstanceEntity> decommissionMultipleInstances(Long toolId, int quantity) {
+        if (quantity <= 0) {
+            throw new RuntimeException("Quantity must be greater than 0");
+        }
+
+        List<ToolInstanceEntity> availableInstances = toolInstanceRepository.findAvailableInstancesByToolId(toolId);
+
+        if (availableInstances.size() < quantity) {
+            throw new RuntimeException("Not enough available instances to decommission. Requested: " + quantity + ", Available: " + availableInstances.size());
+        }
+
+        List<ToolInstanceEntity> decommissionedInstances = new java.util.ArrayList<>();
+        for (int i = 0; i < quantity; i++) {
+            ToolInstanceEntity instance = availableInstances.get(i);
+            instance.setStatus(ToolInstanceStatus.DECOMMISSIONED);
+            decommissionedInstances.add(toolInstanceRepository.save(instance));
+        }
+
+        return decommissionedInstances;
+    }
     // Helper class for statistics
     public static class ToolInstanceStats {
         public final long available;

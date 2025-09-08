@@ -55,6 +55,32 @@ public class ToolController {
         }
     }
 
+    // POST /api/tools/{id}/add-stock - Add more stock to existing tool
+    @PostMapping("/{id}/add-stock")
+    public ResponseEntity<?> addToolStock(@PathVariable Long id, @RequestParam Integer quantity) {
+        try {
+            ToolEntity updatedTool = toolService.addToolStock(id, quantity);
+            return new ResponseEntity<>(updatedTool, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);
+        } catch (Exception e) {
+            return new ResponseEntity<>("Error adding stock", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
+    // PUT /api/tools/{id}/synchronize-stock - Synchronize stock with actual instances
+    @PutMapping("/{id}/synchronize-stock")
+    public ResponseEntity<?> synchronizeStock(@PathVariable Long id) {
+        try {
+            ToolEntity synchronizedTool = toolService.synchronizeStock(id);
+            return new ResponseEntity<>(synchronizedTool, HttpStatus.OK);
+        } catch (RuntimeException e) {
+            return new ResponseEntity<>(e.getMessage(), HttpStatus.NOT_FOUND);
+        } catch (Exception e) {
+            return new ResponseEntity<>("Error synchronizing stock", HttpStatus.INTERNAL_SERVER_ERROR);
+        }
+    }
+
     // PUT /api/tools/{id} - Update tool
     @PutMapping("/{id}")
     public ResponseEntity<?> updateTool(@PathVariable Long id, @RequestBody ToolEntity toolDetails) {
