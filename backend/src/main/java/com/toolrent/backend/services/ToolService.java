@@ -1,7 +1,6 @@
 package com.toolrent.backend.services;
 
 import com.toolrent.backend.entities.ToolEntity;
-import com.toolrent.backend.entities.CategoryEntity;
 import com.toolrent.backend.entities.ToolInstanceEntity;
 import com.toolrent.backend.repositories.ToolRepository;
 import com.toolrent.backend.repositories.CategoryRepository;
