@@ -183,6 +183,19 @@ public class ToolInstanceService {
         toolInstanceRepository.deleteByToolId(toolId);
     }
 
+    // Delete individual instance
+    public void deleteInstance(Long instanceId) {
+        ToolInstanceEntity instance = toolInstanceRepository.findById(instanceId)
+                .orElseThrow(() -> new RuntimeException("Tool instance not found with ID: " + instanceId));
+
+        toolInstanceRepository.delete(instance);
+    }
+
+    public ToolInstanceEntity getInstanceById(Long instanceId) {
+        return toolInstanceRepository.findById(instanceId)
+                .orElseThrow(() -> new RuntimeException("Tool instance not found with ID: " + instanceId));
+    }
+
     // Decommission multiple instances (for bulk operations)
     @Transactional
     public List<ToolInstanceEntity> decommissionMultipleInstances(Long toolId, int quantity) {

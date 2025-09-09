@@ -2,10 +2,13 @@ package com.toolrent.backend.services;
 
 import com.toolrent.backend.entities.ToolEntity;
 import com.toolrent.backend.entities.CategoryEntity;
+import com.toolrent.backend.entities.ToolInstanceEntity;
 import com.toolrent.backend.repositories.ToolRepository;
 import com.toolrent.backend.repositories.CategoryRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -185,7 +188,32 @@ public class ToolService {
     public boolean toolNameExists(String name) {
         return toolRepository.existsByNameIgnoreCase(name);
     }
+    @Transactional
+    public void deleteToolInstanceAndUpdateStock(Long instanceId) {
+        // 1. Obtener la instancia antes de eliminarla (necesitamos la info de la herramienta)
+        ToolInstanceEntity instance = toolInstanceService.getInstanceById(instanceId);
+        Long toolId = instance.getTool().getId();
 
+        // 2. Eliminar la instancia
+        toolInstanceService.deleteInstance(instanceId);
+
+        // 3. Obtener la herramienta y actualizar su stock
+        ToolEntity tool = toolRepository.findById(toolId)
+                .orElseThrow(() -> new RuntimeException("Tool not found with ID: " + toolId));
+
+        // 4. Reducir el stock actual en 1
+        tool.setCurrentStock(tool.getCurrentStock() - 1);
+
+        // 5. Actualizar estado si es necesario
+        if (tool.getCurrentStock() <= 0) {
+            tool.setStatus(ToolEntity.ToolStatus.DECOMMISSIONED);
+        }
+
+        // 6. Guardar los cambios
+        toolRepository.save(tool);
+
+        System.out.println("=== DEBUG: Instance deleted and stock updated. New stock: " + tool.getCurrentStock() + " ===");
+    }
     // MODIFICAR: Update tool stock should sync with instances
     @Transactional
     public ToolEntity updateToolStock(Long id, Integer newStock) {
@@ -256,7 +284,7 @@ public class ToolService {
             throw new RuntimeException("Tool category is required");
         }
 
-        if (tool.getReplacementValue() == null || tool.getReplacementValue().compareTo(java.math.BigDecimal.ZERO) <= 0) {
+        if (tool.getReplacementValue() == null || tool.getReplacementValue().compareTo(BigDecimal.ZERO) <= 0) {
             throw new RuntimeException("Tool replacement value is required and must be greater than 0");
         }
 

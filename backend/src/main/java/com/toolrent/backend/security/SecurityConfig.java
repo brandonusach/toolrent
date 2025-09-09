@@ -31,11 +31,13 @@ public class SecurityConfig {
                         // Rutas públicas
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/public/**").permitAll()
-
-                        // Rutas protegidas - requieren autenticación
-                        .requestMatchers("/api/users/**").authenticated()
                         .requestMatchers("/api/categories/**").permitAll()
                         .requestMatchers("/api/tools/**").permitAll()
+                        .requestMatchers("/api/tool-instances/**").permitAll()
+
+
+                        // Rutas protegidas - requieren autenticación
+                        .requestMatchers("/api/users/**").permitAll()
                         .requestMatchers("/api/loans/**").authenticated()
                         .requestMatchers("/api/clients/**").authenticated()
                         .requestMatchers("/api/reports/**").authenticated()
