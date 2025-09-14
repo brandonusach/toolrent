@@ -34,19 +34,20 @@ public class SecurityConfig {
                         .requestMatchers("/api/categories/**").permitAll()
                         .requestMatchers("/api/tools/**").permitAll()
                         .requestMatchers("/api/tool-instances/**").permitAll()
-
+                        .requestMatchers("/api/client/**").permitAll()
+                        .requestMatchers("/api/users/**").permitAll()
 
                         // Rutas protegidas - requieren autenticación
-                        .requestMatchers("/api/users/**").permitAll()
                         .requestMatchers("/api/loans/**").authenticated()
-                        .requestMatchers("/api/clients/**").authenticated()
                         .requestMatchers("/api/reports/**").authenticated()
 
                         .anyRequest().authenticated()
                 )
-                .oauth2ResourceServer(oauth2 ->
-                        oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthConverter()))
-                );
+        // COMENTADO TEMPORALMENTE PARA PRUEBAS
+        // .oauth2ResourceServer(oauth2 ->
+        //         oauth2.jwt(jwt -> jwt.jwtAuthenticationConverter(jwtAuthConverter()))
+        // );
+        ;
 
         return http.build();
     }
