@@ -17,13 +17,13 @@ public class ToolService {
 
     private final ToolRepository toolRepository;
     private final CategoryRepository categoryRepository;
-    private final ToolInstanceService toolInstanceService; // AGREGAR ESTA DEPENDENCIA
+    private final ToolInstanceService toolInstanceService;
 
     public ToolService(ToolRepository toolRepository, CategoryRepository categoryRepository,
-                       ToolInstanceService toolInstanceService) { // AGREGAR AL CONSTRUCTOR
+                       ToolInstanceService toolInstanceService) {
         this.toolRepository = toolRepository;
         this.categoryRepository = categoryRepository;
-        this.toolInstanceService = toolInstanceService; // INICIALIZAR
+        this.toolInstanceService = toolInstanceService;
     }
 
     // Get all tools
