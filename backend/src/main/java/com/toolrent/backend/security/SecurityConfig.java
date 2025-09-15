@@ -36,10 +36,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/tool-instances/**").permitAll()
                         .requestMatchers("/api/client/**").permitAll()
                         .requestMatchers("/api/users/**").permitAll()
-
+                        .requestMatchers("/api/loans/**").permitAll()
+                        .requestMatchers("/api/reports/**").permitAll()
                         // Rutas protegidas - requieren autenticación
-                        .requestMatchers("/api/loans/**").authenticated()
-                        .requestMatchers("/api/reports/**").authenticated()
+
 
                         .anyRequest().authenticated()
                 )
