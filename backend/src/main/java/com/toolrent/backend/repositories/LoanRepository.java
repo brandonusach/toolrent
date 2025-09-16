@@ -94,5 +94,5 @@ public interface LoanRepository extends JpaRepository<LoanEntity, Long> {
     // Top clientes con más préstamos
     @Query("SELECT l.client.name, COUNT(l), SUM(l.quantity) FROM LoanEntity l GROUP BY l.client.name ORDER BY COUNT(l) DESC")
     List<Object[]> findTopClientsByLoanCount();
-    
+
 }
