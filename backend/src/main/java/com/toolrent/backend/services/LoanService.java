@@ -4,6 +4,7 @@ import com.toolrent.backend.entities.*;
 import com.toolrent.backend.repositories.LoanRepository;
 import com.toolrent.backend.repositories.FineRepository;
 import com.toolrent.backend.repositories.RateRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,30 +17,27 @@ import java.util.List;
 @Transactional
 public class LoanService {
 
-    private final LoanRepository loanRepository;
-    private final FineRepository fineRepository;
-    private final RateRepository rateRepository;
-    private final ToolInstanceService toolInstanceService;
-    private final ClientService clientService;
-    private final KardexMovementService kardexMovementService;
+    @Autowired
+    private LoanRepository loanRepository;
 
-    public LoanService(LoanRepository loanRepository,
-                       FineRepository fineRepository,
-                       RateRepository rateRepository,
-                       ToolInstanceService toolInstanceService,
-                       ClientService clientService,
-                       KardexMovementService kardexMovementService) {
-        this.loanRepository = loanRepository;
-        this.fineRepository = fineRepository;
-        this.rateRepository = rateRepository;
-        this.toolInstanceService = toolInstanceService;
-        this.clientService = clientService;
-        this.kardexMovementService = kardexMovementService;
-    }
+    @Autowired
+    private FineRepository fineRepository;
+
+    @Autowired
+    private RateRepository rateRepository;
+
+    @Autowired
+    private ToolInstanceService toolInstanceService;
+
+    @Autowired
+    private ClientService clientService;
+
+    @Autowired
+    private KardexMovementService kardexMovementService;
 
     // RF2.1: Create new loan with validations
     @Transactional
-    public LoanEntity createLoan(LoanEntity loan) {
+    public LoanEntity createLoan(LoanEntity loan) throws Exception {
         // Validate loan preconditions
         validateLoanCreation(loan);
 
@@ -59,7 +57,7 @@ public class LoanService {
         try {
             toolInstanceService.reserveMultipleInstances(loan.getTool().getId(), loan.getQuantity());
         } catch (Exception e) {
-            throw new RuntimeException("Failed to reserve tool instances: " + e.getMessage());
+            throw new Exception("Failed to reserve tool instances: " + e.getMessage());
         }
 
         // Save the loan
@@ -76,7 +74,7 @@ public class LoanService {
                     savedLoan
             );
         } catch (Exception e) {
-            throw new RuntimeException("Failed to create kardex movement: " + e.getMessage());
+            throw new Exception("Failed to create kardex movement: " + e.getMessage());
         }
 
         return savedLoan;
@@ -84,13 +82,13 @@ public class LoanService {
 
     // RF2.3: Return tool and calculate fines if necessary
     @Transactional
-    public LoanEntity returnTool(Long loanId, boolean damaged, String notes) {
+    public LoanEntity returnTool(Long loanId, boolean damaged, String notes) throws Exception {
         LoanEntity loan = loanRepository.findById(loanId)
-                .orElseThrow(() -> new RuntimeException("Loan not found with ID: " + loanId));
+                .orElseThrow(() -> new Exception("Loan not found with ID: " + loanId));
 
         // Validate that loan is active
         if (loan.getStatus() != LoanEntity.LoanStatus.ACTIVE) {
-            throw new RuntimeException("Loan is not active and cannot be returned");
+            throw new Exception("Loan is not active and cannot be returned");
         }
 
         // Set actual return date
@@ -136,7 +134,7 @@ public class LoanService {
                     loan
             );
         } catch (Exception e) {
-            throw new RuntimeException("Failed to create return kardex movement: " + e.getMessage());
+            throw new Exception("Failed to create return kardex movement: " + e.getMessage());
         }
 
         // Update client status if necessary
@@ -166,9 +164,9 @@ public class LoanService {
     }
 
     // Get loan by ID
-    public LoanEntity getLoanById(Long id) {
+    public LoanEntity getLoanById(Long id) throws Exception {
         return loanRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Loan not found with ID: " + id));
+                .orElseThrow(() -> new Exception("Loan not found with ID: " + id));
     }
 
     // Get all loans
@@ -177,69 +175,69 @@ public class LoanService {
     }
 
     // Business validation methods
-    private void validateLoanCreation(LoanEntity loan) {
+    private void validateLoanCreation(LoanEntity loan) throws Exception {
         // Validate required fields
         if (loan.getClient() == null) {
-            throw new RuntimeException("Client is required for loan");
+            throw new Exception("Client is required for loan");
         }
         if (loan.getTool() == null) {
-            throw new RuntimeException("Tool is required for loan");
+            throw new Exception("Tool is required for loan");
         }
         if (loan.getQuantity() == null || loan.getQuantity() <= 0) {
-            throw new RuntimeException("Quantity must be greater than 0");
+            throw new Exception("Quantity must be greater than 0");
         }
         if (loan.getAgreedReturnDate() == null) {
-            throw new RuntimeException("Agreed return date is required");
+            throw new Exception("Agreed return date is required");
         }
         if (loan.getCreatedBy() == null) {
-            throw new RuntimeException("User creating loan is required");
+            throw new Exception("User creating loan is required");
         }
 
         // BR: Client must be ACTIVE (not restricted)
         if (loan.getClient().getStatus() != ClientEntity.ClientStatus.ACTIVE) {
-            throw new RuntimeException("Client is restricted and cannot request loans");
+            throw new Exception("Client is restricted and cannot request loans");
         }
 
         // BR: Client cannot have overdue loans
         List<LoanEntity> overdueLoans = loanRepository.findOverdueLoansByClient(
                 loan.getClient(), LocalDate.now());
         if (!overdueLoans.isEmpty()) {
-            throw new RuntimeException("Client has overdue loans and cannot request new loans");
+            throw new Exception("Client has overdue loans and cannot request new loans");
         }
 
         // BR: Client cannot have unpaid fines
         if (hasUnpaidFines(loan.getClient())) {
-            throw new RuntimeException("Client has unpaid fines and cannot request new loans");
+            throw new Exception("Client has unpaid fines and cannot request new loans");
         }
 
         // BR: Tool must be AVAILABLE
         if (loan.getTool().getStatus() != ToolEntity.ToolStatus.AVAILABLE) {
-            throw new RuntimeException("Tool is not available for loan");
+            throw new Exception("Tool is not available for loan");
         }
 
         // BR: Check tool availability (RF2.2)
         if (!toolInstanceService.isAvailable(loan.getTool().getId(), loan.getQuantity())) {
-            throw new RuntimeException("Not enough tool instances available");
+            throw new Exception("Not enough tool instances available");
         }
 
         // BR: Client cannot have more than 5 active loans
         long activeLoanCount = loanRepository.countActiveLoansByClient(loan.getClient());
         if (activeLoanCount >= 5) {
-            throw new RuntimeException("Client has reached maximum of 5 active loans");
+            throw new Exception("Client has reached maximum of 5 active loans");
         }
 
         // BR: Client cannot have more than one unit of same tool
         long existingLoanCount = loanRepository.countActiveLoansByClientAndTool(
                 loan.getClient(), loan.getTool());
         if (existingLoanCount > 0) {
-            throw new RuntimeException("Client already has an active loan for this tool");
+            throw new Exception("Client already has an active loan for this tool");
         }
 
         // BR: Return date must be after loan date
         LocalDate loanDate = loan.getLoanDate() != null ? loan.getLoanDate() : LocalDate.now();
         if (loan.getAgreedReturnDate().isBefore(loanDate) ||
                 loan.getAgreedReturnDate().isEqual(loanDate)) {
-            throw new RuntimeException("Return date must be after loan date");
+            throw new Exception("Return date must be after loan date");
         }
     }
 
@@ -252,7 +250,7 @@ public class LoanService {
                 loan.getActualReturnDate().isAfter(loan.getAgreedReturnDate());
     }
 
-    private void createFinesIfNecessary(LoanEntity loan, boolean damaged) {
+    private void createFinesIfNecessary(LoanEntity loan, boolean damaged) throws Exception {
         LocalDate returnDate = loan.getActualReturnDate();
 
         // RF2.4: Calculate late return fine
@@ -304,7 +302,7 @@ public class LoanService {
         return tool.getReplacementValue().multiply(new BigDecimal("0.1")); // 10%
     }
 
-    private void updateClientStatusIfNecessary(ClientEntity client) {
+    private void updateClientStatusIfNecessary(ClientEntity client) throws Exception {
         // Check if client still has unpaid fines or overdue loans
         boolean hasUnpaidFines = fineRepository.countUnpaidFinesByClient(client) > 0;
         boolean hasOverdueLoans = !loanRepository.findOverdueLoansByClient(client, LocalDate.now()).isEmpty();
@@ -312,12 +310,12 @@ public class LoanService {
         if (hasUnpaidFines || hasOverdueLoans) {
             if (client.getStatus() == ClientEntity.ClientStatus.ACTIVE) {
                 client.setStatus(ClientEntity.ClientStatus.RESTRICTED);
-                clientService.saveClient(client);
+                clientService.updateClient(client);
             }
         } else {
             if (client.getStatus() == ClientEntity.ClientStatus.RESTRICTED) {
                 client.setStatus(ClientEntity.ClientStatus.ACTIVE);
-                clientService.saveClient(client);
+                clientService.updateClient(client);
             }
         }
     }

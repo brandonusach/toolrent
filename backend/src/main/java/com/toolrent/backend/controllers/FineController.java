@@ -149,19 +149,6 @@ public class FineController {
         }
     }
 
-    // GET /api/fines/client/{clientId}/summary - Get client fine summary
-    @GetMapping("/client/{clientId}/summary")
-    public ResponseEntity<?> getClientFineSummary(@PathVariable Long clientId) {
-        try {
-            ClientEntity client = clientService.getClientById(clientId);
-            Object summary = fineService.getClientFineSummary(client);
-            return new ResponseEntity<>(summary, HttpStatus.OK);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(e.getMessage(), HttpStatus.NOT_FOUND);
-        } catch (Exception e) {
-            return new ResponseEntity<>("Error generating fine summary", HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
 
     // GET /api/fines/type/{type} - Get fines by type
     @GetMapping("/type/{type}")

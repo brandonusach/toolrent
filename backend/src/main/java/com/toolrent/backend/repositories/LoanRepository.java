@@ -94,8 +94,5 @@ public interface LoanRepository extends JpaRepository<LoanEntity, Long> {
     // Top clientes con más préstamos
     @Query("SELECT l.client.name, COUNT(l), SUM(l.quantity) FROM LoanEntity l GROUP BY l.client.name ORDER BY COUNT(l) DESC")
     List<Object[]> findTopClientsByLoanCount();
-
-    // Duración promedio de préstamos por herramienta
-    @Query("SELECT l.tool.name, AVG(DATEDIFF(l.actualReturnDate, l.loanDate)) FROM LoanEntity l WHERE l.actualReturnDate IS NOT NULL GROUP BY l.tool.name")
-    List<Object[]> findAverageLoanDurationByTool();
+    
 }
