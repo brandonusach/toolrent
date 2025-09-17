@@ -1,4 +1,4 @@
-// inventory/InventoryManagement.jsx
+// inventory/InventoryManagement.jsx - PURE VERSION
 import React, { useState, useEffect } from 'react';
 import ToolList from './components/ToolList';
 import ToolForm from './components/ToolForm';
@@ -8,7 +8,7 @@ import { useTools } from './hooks/useTools';
 import { useCategories } from './hooks/useCategories';
 
 const InventoryManagement = () => {
-    // Estados principales para modales
+    // Modal states
     const [selectedTool, setSelectedTool] = useState(null);
     const [showAddModal, setShowAddModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
@@ -16,12 +16,11 @@ const InventoryManagement = () => {
     const [showStockModal, setShowStockModal] = useState(false);
     const [modalType, setModalType] = useState(''); // 'add-stock' | 'decommission'
 
-    // Estados para filtros
+    // Filter states (UI only)
     const [searchTerm, setSearchTerm] = useState('');
-    const [statusFilter, setStatusFilter] = useState('ALL');
     const [categoryFilter, setCategoryFilter] = useState('ALL');
 
-    // Custom hooks para datos y operaciones
+    // Data hooks (pure API operations)
     const {
         tools,
         loading,
@@ -31,18 +30,18 @@ const InventoryManagement = () => {
         deleteTool,
         updateStock,
         decommissionTool,
-        getToolStats
+        filterTools
     } = useTools();
 
     const { categories, loadCategories } = useCategories();
 
-    // Cargar datos iniciales
+    // Load initial data
     useEffect(() => {
         loadTools();
         loadCategories();
     }, [loadTools, loadCategories]);
 
-    // Handlers para gestión de modales
+    // Modal handlers (pure UI logic)
     const handleViewInstances = (tool) => {
         setSelectedTool(tool);
         setShowInstanceModal(true);
@@ -68,39 +67,36 @@ const InventoryManagement = () => {
         setModalType('');
     };
 
-    // Handler para crear herramienta
+    // CRUD handlers (minimal frontend logic)
     const handleCreateTool = async (toolData) => {
-        try {
-            await createTool(toolData);
-            closeAllModals();
-        } catch (error) {
-            throw error; // Re-lanzar para que el componente ToolForm lo maneje
-        }
-    };
-
-    // Handler para actualizar herramienta
-    const handleUpdateTool = async (toolId, toolData) => {
-        try {
-            await updateTool(toolId, toolData);
-            closeAllModals();
-        } catch (error) {
-            throw error; // Re-lanzar para que el componente ToolForm lo maneje
-        }
-    };
-
-    // Handler para actualizar stock exitosamente
-    const handleStockUpdateSuccess = () => {
-        loadTools(); // Recargar tools para reflejar cambios
+        await createTool(toolData);
         closeAllModals();
     };
 
-    // Handler para actualización de instancias
-    const handleInstanceUpdate = () => {
-        loadTools(); // Recargar tools cuando las instancias cambien
+    const handleUpdateTool = async (toolId, toolData) => {
+        await updateTool(toolId, toolData);
+        closeAllModals();
     };
 
-    // Obtener estadísticas para mostrar en el header (opcional)
-    const stats = getToolStats();
+    const handleStockUpdateSuccess = () => {
+        loadTools(); // Refresh data from backend
+        closeAllModals();
+    };
+
+    const handleInstanceUpdate = () => {
+        loadTools(); // Refresh data from backend
+    };
+
+    // Get filtered tools for display
+    const filteredTools = filterTools(searchTerm, categoryFilter);
+
+    // Simple stats calculation for display (not business logic)
+    const displayStats = {
+        totalTools: tools.length,
+        totalStock: tools.reduce((sum, tool) => sum + (tool.currentStock || 0), 0),
+        lowStockTools: tools.filter(tool => (tool.currentStock || 0) <= 2).length,
+        noStockTools: tools.filter(tool => (tool.currentStock || 0) === 0).length
+    };
 
     return (
         <div className="p-6 bg-gray-900 min-h-screen">
@@ -113,38 +109,36 @@ const InventoryManagement = () => {
                     Gestiona herramientas y su estado individual
                 </p>
 
-                {/* Estadísticas rápidas (opcional) */}
-                {stats.totalTools > 0 && (
+                {/* Quick Stats Display */}
+                {displayStats.totalTools > 0 && (
                     <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-gray-800 rounded-lg p-4 border border-gray-700">
                         <div className="text-center">
-                            <div className="text-2xl font-bold text-white">{stats.totalTools}</div>
+                            <div className="text-2xl font-bold text-white">{displayStats.totalTools}</div>
                             <div className="text-sm text-gray-400">Total Herramientas</div>
                         </div>
                         <div className="text-center">
-                            <div className="text-2xl font-bold text-green-400">{stats.totalStock}</div>
+                            <div className="text-2xl font-bold text-green-400">{displayStats.totalStock}</div>
                             <div className="text-sm text-gray-400">Stock Total</div>
                         </div>
                         <div className="text-center">
-                            <div className="text-2xl font-bold text-orange-400">{stats.lowStockTools}</div>
+                            <div className="text-2xl font-bold text-orange-400">{displayStats.lowStockTools}</div>
                             <div className="text-sm text-gray-400">Stock Bajo</div>
                         </div>
                         <div className="text-center">
-                            <div className="text-2xl font-bold text-red-400">{stats.noStockTools}</div>
+                            <div className="text-2xl font-bold text-red-400">{displayStats.noStockTools}</div>
                             <div className="text-sm text-gray-400">Sin Stock</div>
                         </div>
                     </div>
                 )}
             </div>
 
-            {/* Lista principal de herramientas */}
+            {/* Main Tool List */}
             <ToolList
-                tools={tools}
+                tools={filteredTools}
                 categories={categories}
                 loading={loading}
                 searchTerm={searchTerm}
                 setSearchTerm={setSearchTerm}
-                statusFilter={statusFilter}
-                setStatusFilter={setStatusFilter}
                 categoryFilter={categoryFilter}
                 setCategoryFilter={setCategoryFilter}
                 onViewInstances={handleViewInstances}
@@ -156,7 +150,7 @@ const InventoryManagement = () => {
                 onRefresh={loadTools}
             />
 
-            {/* Modal: Agregar nueva herramienta */}
+            {/* Modal: Add New Tool */}
             {showAddModal && (
                 <ToolForm
                     mode="create"
@@ -166,7 +160,7 @@ const InventoryManagement = () => {
                 />
             )}
 
-            {/* Modal: Editar herramienta existente */}
+            {/* Modal: Edit Existing Tool */}
             {showEditModal && selectedTool && (
                 <ToolForm
                     mode="edit"
@@ -177,7 +171,7 @@ const InventoryManagement = () => {
                 />
             )}
 
-            {/* Modal: Ver y gestionar instancias */}
+            {/* Modal: View and Manage Instances */}
             {showInstanceModal && selectedTool && (
                 <InstanceManager
                     tool={selectedTool}
@@ -186,7 +180,7 @@ const InventoryManagement = () => {
                 />
             )}
 
-            {/* Modal: Gestión de stock (agregar/dar de baja) */}
+            {/* Modal: Stock Management */}
             {showStockModal && selectedTool && (
                 <StockManager
                     tool={selectedTool}

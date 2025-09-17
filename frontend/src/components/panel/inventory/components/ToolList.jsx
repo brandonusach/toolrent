@@ -1,4 +1,4 @@
-// inventory/components/ToolList.jsx
+// inventory/components/ToolList.jsx - PURE VERSION
 import React from 'react';
 import {
     Plus, Edit2, Trash2, Eye, Package, AlertTriangle,
@@ -11,8 +11,6 @@ const ToolList = ({
                       loading,
                       searchTerm,
                       setSearchTerm,
-                      statusFilter,
-                      setStatusFilter,
                       categoryFilter,
                       setCategoryFilter,
                       onViewInstances,
@@ -23,9 +21,11 @@ const ToolList = ({
                       onAddNew,
                       onRefresh
                   }) => {
-    // Filtrar herramientas
+
+    // Simple client-side filtering (only UI logic)
     const filteredTools = tools.filter(tool => {
-        const matchesSearch = tool.name.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesSearch = !searchTerm ||
+            tool.name.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesCategory = categoryFilter === 'ALL' ||
             (tool.category && tool.category.id.toString() === categoryFilter);
         return matchesSearch && matchesCategory;
@@ -120,16 +120,23 @@ const ToolList = ({
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                     <div className="flex items-center">
-                                        <span className={`text-sm font-medium ${(tool.currentStock || 0) <= 2 ? 'text-red-400' : 'text-gray-300'}`}>
-                                            {tool.currentStock || 0} / {tool.initialStock}
+                                        {/* Display stock as provided by backend, with optional styling based on values */}
+                                        <span className={`text-sm font-medium ${
+                                            tool.currentStock <= 0
+                                                ? 'text-red-400'
+                                                : tool.currentStock <= 2
+                                                    ? 'text-orange-400'
+                                                    : 'text-gray-300'
+                                        }`}>
+                                            {tool.currentStock || 0} / {tool.initialStock || 0}
                                         </span>
-                                        {(tool.currentStock || 0) <= 2 && (
-                                            <AlertTriangle className="h-4 w-4 text-red-400 ml-2" />
+                                        {tool.currentStock <= 2 && (
+                                            <AlertTriangle className="h-4 w-4 text-orange-400 ml-2" />
                                         )}
                                     </div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-gray-300">
-                                    ${tool.replacementValue?.toLocaleString() || '0'}
+                                    ${(tool.replacementValue || 0).toLocaleString('es-CL')}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                     <div className="flex space-x-2">

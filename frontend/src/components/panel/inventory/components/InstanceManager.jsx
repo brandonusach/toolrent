@@ -1,4 +1,4 @@
-// inventory/components/InstanceManager.jsx
+// inventory/components/InstanceManager.jsx - PURE VERSION
 import React, { useState, useEffect } from 'react';
 import { X, Package, Trash2, AlertTriangle, RefreshCw } from 'lucide-react';
 
@@ -15,14 +15,14 @@ const InstanceManager = ({ tool, onClose, onInstanceUpdate }) => {
         }
     }, [tool]);
 
-    // Función para cerrar el modal al hacer clic en el overlay
+    // Handle overlay click to close modal
     const handleOverlayClick = (e) => {
         if (e.target === e.currentTarget) {
             onClose();
         }
     };
 
-    // Función para cerrar con tecla Escape
+    // Handle escape key to close
     useEffect(() => {
         const handleEscape = (e) => {
             if (e.key === 'Escape') {
@@ -44,9 +44,7 @@ const InstanceManager = ({ tool, onClose, onInstanceUpdate }) => {
             } else {
                 console.error('Error loading instances:', response.status);
                 setInstances([]);
-                if (response.status === 404) {
-                    // No hay instancias, está bien
-                } else {
+                if (response.status !== 404) {
                     alert('Error al cargar instancias de herramientas');
                 }
             }
@@ -72,7 +70,7 @@ const InstanceManager = ({ tool, onClose, onInstanceUpdate }) => {
 
             if (response.ok) {
                 await loadInstances();
-                onInstanceUpdate(); // Actualizar el inventario principal
+                onInstanceUpdate(); // Update main inventory
                 alert('Estado actualizado exitosamente');
             } else {
                 const errorText = await response.text();
@@ -99,7 +97,7 @@ const InstanceManager = ({ tool, onClose, onInstanceUpdate }) => {
 
             if (response.ok) {
                 await loadInstances();
-                onInstanceUpdate(); // Actualizar el inventario principal
+                onInstanceUpdate(); // Update main inventory
                 alert('Instancia eliminada exitosamente');
             } else {
                 const errorText = await response.text();
@@ -113,36 +111,28 @@ const InstanceManager = ({ tool, onClose, onInstanceUpdate }) => {
         }
     };
 
+    // Simple status display functions (no business logic)
     const getStatusColor = (status) => {
-        switch (status) {
-            case 'AVAILABLE':
-                return 'bg-green-900 text-green-300';
-            case 'LOANED':
-                return 'bg-blue-900 text-blue-300';
-            case 'UNDER_REPAIR':
-                return 'bg-yellow-900 text-yellow-300';
-            case 'DECOMMISSIONED':
-                return 'bg-red-900 text-red-300';
-            default:
-                return 'bg-gray-900 text-gray-300';
-        }
+        const colors = {
+            'AVAILABLE': 'bg-green-900 text-green-300',
+            'LOANED': 'bg-blue-900 text-blue-300',
+            'UNDER_REPAIR': 'bg-yellow-900 text-yellow-300',
+            'DECOMMISSIONED': 'bg-red-900 text-red-300'
+        };
+        return colors[status] || 'bg-gray-900 text-gray-300';
     };
 
     const getStatusText = (status) => {
-        switch (status) {
-            case 'AVAILABLE':
-                return 'Disponible';
-            case 'LOANED':
-                return 'Prestada';
-            case 'UNDER_REPAIR':
-                return 'En Reparación';
-            case 'DECOMMISSIONED':
-                return 'Dada de Baja';
-            default:
-                return status;
-        }
+        const labels = {
+            'AVAILABLE': 'Disponible',
+            'LOANED': 'Prestada',
+            'UNDER_REPAIR': 'En Reparación',
+            'DECOMMISSIONED': 'Dada de Baja'
+        };
+        return labels[status] || status;
     };
 
+    // Simple counting function (no business logic)
     const getStatusCounts = () => {
         const counts = {
             AVAILABLE: 0,
@@ -195,7 +185,7 @@ const InstanceManager = ({ tool, onClose, onInstanceUpdate }) => {
                     </div>
                 </div>
 
-                {/* Resumen de estados */}
+                {/* Status Summary */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                     <div className="bg-green-900 bg-opacity-30 rounded-lg p-3">
                         <div className="text-green-400 font-bold text-lg">{statusCounts.AVAILABLE}</div>
@@ -215,7 +205,7 @@ const InstanceManager = ({ tool, onClose, onInstanceUpdate }) => {
                     </div>
                 </div>
 
-                {/* Lista de instancias */}
+                {/* Instance List */}
                 <div className="overflow-y-auto" style={{ maxHeight: 'calc(90vh - 300px)' }}>
                     {loading ? (
                         <div className="text-center py-8">
@@ -238,7 +228,7 @@ const InstanceManager = ({ tool, onClose, onInstanceUpdate }) => {
                                     className="bg-gray-700 rounded-lg p-4 hover:bg-gray-650 transition-colors"
                                 >
                                     <div className="flex flex-col lg:flex-row lg:justify-between lg:items-center space-y-3 lg:space-y-0">
-                                        {/* Información de la instancia */}
+                                        {/* Instance Information */}
                                         <div className="flex items-center space-x-4">
                                             <div>
                                                 <p className="text-white font-medium">
@@ -250,9 +240,9 @@ const InstanceManager = ({ tool, onClose, onInstanceUpdate }) => {
                                             </div>
                                         </div>
 
-                                        {/* Estado y acciones */}
+                                        {/* Status and Actions */}
                                         <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
-                                            {/* Selector de estado */}
+                                            {/* Status Selector */}
                                             <div className="flex items-center space-x-2">
                                                 <span className="text-sm text-gray-300">Estado:</span>
                                                 <select
@@ -268,12 +258,12 @@ const InstanceManager = ({ tool, onClose, onInstanceUpdate }) => {
                                                 </select>
                                             </div>
 
-                                            {/* Badge de estado actual */}
+                                            {/* Current Status Badge */}
                                             <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(instance.status)}`}>
                                                 {getStatusText(instance.status)}
                                             </span>
 
-                                            {/* Botón eliminar */}
+                                            {/* Delete Button */}
                                             <button
                                                 onClick={() => handleDeleteInstance(instance.id)}
                                                 disabled={updating}
@@ -285,7 +275,7 @@ const InstanceManager = ({ tool, onClose, onInstanceUpdate }) => {
                                         </div>
                                     </div>
 
-                                    {/* Advertencia para instancias prestadas */}
+                                    {/* Loan Warning */}
                                     {instance.status === 'LOANED' && (
                                         <div className="flex items-center mt-3 p-2 bg-blue-900 bg-opacity-30 rounded">
                                             <AlertTriangle className="h-4 w-4 text-blue-400 mr-2 flex-shrink-0" />
@@ -300,7 +290,7 @@ const InstanceManager = ({ tool, onClose, onInstanceUpdate }) => {
                     )}
                 </div>
 
-                {/* Footer con información adicional */}
+                {/* Footer */}
                 <div className="mt-6 pt-4 border-t border-gray-700">
                     <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center text-sm text-gray-400 space-y-1 sm:space-y-0">
                         <span>
@@ -311,8 +301,6 @@ const InstanceManager = ({ tool, onClose, onInstanceUpdate }) => {
                         </span>
                     </div>
                 </div>
-
-
             </div>
         </div>
     );

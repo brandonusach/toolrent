@@ -1,89 +1,79 @@
-// inventory/components/ToolForm.jsx
+// inventory/components/ToolForm.jsx - PURE VERSION
 import React, { useState, useEffect } from 'react';
 
 const ToolForm = ({ mode, tool, categories, onSubmit, onClose }) => {
     const [formData, setFormData] = useState({
         name: '',
-        category: null,
+        categoryId: '',
         initialStock: 1,
         replacementValue: 0
     });
 
-    const [errors, setErrors] = useState({});
     const [loading, setLoading] = useState(false);
+    const [serverErrors, setServerErrors] = useState({});
 
-    // Inicializar formulario
+    // Initialize form data
     useEffect(() => {
         if (mode === 'edit' && tool) {
             setFormData({
                 name: tool.name || '',
-                category: tool.category || null,
+                categoryId: tool.category?.id || '',
                 initialStock: tool.initialStock || 1,
                 replacementValue: tool.replacementValue || 0
             });
         } else {
-            // Reset para modo crear
             setFormData({
                 name: '',
-                category: null,
+                categoryId: '',
                 initialStock: 1,
                 replacementValue: 0
             });
         }
-        setErrors({});
+        setServerErrors({});
     }, [mode, tool]);
-
-    const validateForm = () => {
-        const newErrors = {};
-
-        if (!formData.name.trim()) {
-            newErrors.name = 'El nombre es requerido';
-        }
-
-        if (!formData.category) {
-            newErrors.category = 'La categoría es requerida';
-        }
-
-        if (formData.initialStock < 1) {
-            newErrors.initialStock = 'El stock inicial debe ser al menos 1';
-        }
-
-        if (formData.replacementValue <= 0) {
-            newErrors.replacementValue = 'El valor de reposición debe ser mayor a 0';
-        }
-
-        setErrors(newErrors);
-        return Object.keys(newErrors).length === 0;
-    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
-
-        if (!validateForm()) {
-            return;
-        }
-
+        setServerErrors({});
         setLoading(true);
+
         try {
+            // Send raw form data to backend - let backend handle all validation
+            const payload = {
+                name: formData.name.trim(),
+                category: { id: parseInt(formData.categoryId) },
+                initialStock: parseInt(formData.initialStock),
+                replacementValue: parseFloat(formData.replacementValue)
+            };
+
             if (mode === 'edit') {
-                await onSubmit(tool.id, formData);
-                alert('Herramienta actualizada exitosamente');
+                await onSubmit(tool.id, payload);
             } else {
-                await onSubmit(formData);
-                alert('Herramienta registrada exitosamente');
+                await onSubmit(payload);
             }
             onClose();
         } catch (error) {
             console.error('Error submitting form:', error);
-            alert(`Error: ${error.message || 'Error desconocido'}`);
+
+            // Handle server validation errors
+            if (error.response && error.response.data) {
+                const errorData = error.response.data;
+
+                // Parse server validation errors into field-specific errors
+                if (typeof errorData === 'object' && errorData.fieldErrors) {
+                    setServerErrors(errorData.fieldErrors);
+                } else if (typeof errorData === 'string') {
+                    // Single error message - show as general alert
+                    alert(`Error: ${errorData}`);
+                } else {
+                    alert('Error: Unknown server error');
+                }
+            } else {
+                alert(`Error: ${error.message || 'Unknown error'}`);
+            }
         } finally {
             setLoading(false);
         }
-    };
-
-    const handleCategoryChange = (e) => {
-        const selectedCategory = categories.find(c => c.id.toString() === e.target.value);
-        setFormData({ ...formData, category: selectedCategory || null });
     };
 
     const title = mode === 'edit' ? 'Editar Herramienta' : 'Registrar Nueva Herramienta';
@@ -95,7 +85,7 @@ const ToolForm = ({ mode, tool, categories, onSubmit, onClose }) => {
                 <h3 className="text-xl font-bold text-white mb-4">{title}</h3>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
-                    {/* Nombre */}
+                    {/* Name Field */}
                     <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
                             Nombre *
@@ -105,28 +95,28 @@ const ToolForm = ({ mode, tool, categories, onSubmit, onClose }) => {
                             value={formData.name}
                             onChange={(e) => setFormData({...formData, name: e.target.value})}
                             className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white focus:outline-none ${
-                                errors.name
+                                serverErrors.name
                                     ? 'border-red-500 focus:border-red-400'
                                     : 'border-gray-600 focus:border-orange-500'
                             }`}
                             placeholder="Nombre de la herramienta"
                             disabled={loading}
                         />
-                        {errors.name && (
-                            <p className="text-red-400 text-xs mt-1">{errors.name}</p>
+                        {serverErrors.name && (
+                            <p className="text-red-400 text-xs mt-1">{serverErrors.name}</p>
                         )}
                     </div>
 
-                    {/* Categoría */}
+                    {/* Category Field */}
                     <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
                             Categoría *
                         </label>
                         <select
-                            value={formData.category?.id || ''}
-                            onChange={handleCategoryChange}
+                            value={formData.categoryId}
+                            onChange={(e) => setFormData({...formData, categoryId: e.target.value})}
                             className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white focus:outline-none ${
-                                errors.category
+                                serverErrors.category
                                     ? 'border-red-500 focus:border-red-400'
                                     : 'border-gray-600 focus:border-orange-500'
                             }`}
@@ -139,12 +129,12 @@ const ToolForm = ({ mode, tool, categories, onSubmit, onClose }) => {
                                 </option>
                             ))}
                         </select>
-                        {errors.category && (
-                            <p className="text-red-400 text-xs mt-1">{errors.category}</p>
+                        {serverErrors.category && (
+                            <p className="text-red-400 text-xs mt-1">{serverErrors.category}</p>
                         )}
                     </div>
 
-                    {/* Stock Inicial */}
+                    {/* Initial Stock Field */}
                     <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
                             Stock Inicial *
@@ -158,18 +148,18 @@ const ToolForm = ({ mode, tool, categories, onSubmit, onClose }) => {
                                 initialStock: parseInt(e.target.value) || 1
                             })}
                             className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white focus:outline-none ${
-                                errors.initialStock
+                                serverErrors.initialStock
                                     ? 'border-red-500 focus:border-red-400'
                                     : 'border-gray-600 focus:border-orange-500'
                             }`}
                             disabled={loading}
                         />
-                        {errors.initialStock && (
-                            <p className="text-red-400 text-xs mt-1">{errors.initialStock}</p>
+                        {serverErrors.initialStock && (
+                            <p className="text-red-400 text-xs mt-1">{serverErrors.initialStock}</p>
                         )}
                     </div>
 
-                    {/* Valor de Reposición */}
+                    {/* Replacement Value Field */}
                     <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
                             Valor de Reposición *
@@ -184,19 +174,19 @@ const ToolForm = ({ mode, tool, categories, onSubmit, onClose }) => {
                                 replacementValue: parseFloat(e.target.value) || 0
                             })}
                             className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white focus:outline-none ${
-                                errors.replacementValue
+                                serverErrors.replacementValue
                                     ? 'border-red-500 focus:border-red-400'
                                     : 'border-gray-600 focus:border-orange-500'
                             }`}
                             placeholder="0.00"
                             disabled={loading}
                         />
-                        {errors.replacementValue && (
-                            <p className="text-red-400 text-xs mt-1">{errors.replacementValue}</p>
+                        {serverErrors.replacementValue && (
+                            <p className="text-red-400 text-xs mt-1">{serverErrors.replacementValue}</p>
                         )}
                     </div>
 
-                    {/* Botones */}
+                    {/* Buttons */}
                     <div className="flex space-x-3 mt-6">
                         <button
                             type="submit"
