@@ -14,7 +14,7 @@ import {
     AlertTriangle
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
-import InventoryManagement from './InventoryManagement';
+import InventoryManagement from './inventory/InventoryManagement';
 
 const AdminPanel = () => {
     const { user, logout } = useAuth();
