@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../auth/AuthContext';
 import InventoryManagement from './inventory/InventoryManagement';
+import ClientManagement from './client/ClientManagement';
 
 const AdminPanel = () => {
     const { user, logout } = useAuth();
@@ -23,7 +24,6 @@ const AdminPanel = () => {
     // Función mejorada para verificar si es admin
     const isUserAdmin = () => {
         if (!user?.role) return false;
-
         const role = user.role.toUpperCase();
         return role === 'ADMINISTRATOR' || role === 'ADMIN';
     };
@@ -63,14 +63,11 @@ const AdminPanel = () => {
         if (!role) return 'Usuario';
 
         const normalizedRole = role.toUpperCase();
-
         if (normalizedRole === 'ADMINISTRATOR' || normalizedRole === 'ADMIN') {
             return 'Administrador';
         } else if (normalizedRole === 'EMPLOYEE' || normalizedRole === 'EMPLEADO') {
             return 'Empleado';
         }
-
-        // Capitalizar primera letra para roles desconocidos
         return role.charAt(0).toUpperCase() + role.slice(1).toLowerCase();
     };
 
@@ -81,27 +78,6 @@ const AdminPanel = () => {
         }
         return 'US';
     };
-
-    // Datos del dashboard
-    const dashboardData = {
-        herramientasDisponibles: 87,
-        prestamosActivos: 24,
-        clientesActivos: 156,
-        prestamosAtrasados: 3
-    };
-
-    const prestamosRecientes = [
-        { cliente: 'Juan Pérez', herramienta: 'Taladro Eléctrico', fecha: '2025-09-01', estado: 'Activo' },
-        { cliente: 'María González', herramienta: 'Sierra Circular', fecha: '2025-09-02', estado: 'Atrasado' },
-        { cliente: 'Carlos Ruiz', herramienta: 'Martillo Neumático', fecha: '2025-09-03', estado: 'Activo' }
-    ];
-
-    const herramientasMasPrestadas = [
-        { nombre: 'Taladro Eléctrico', prestamos: 45 },
-        { nombre: 'Sierra Circular', prestamos: 38 },
-        { nombre: 'Martillo Neumático', prestamos: 32 },
-        { nombre: 'Lijadora Orbital', prestamos: 28 }
-    ];
 
     const isAdmin = isUserAdmin();
 
@@ -198,7 +174,6 @@ const AdminPanel = () => {
                                 }`}>
                                     {getRoleDisplayName()}
                                 </span>
-                                {/* Badge adicional para indicar el estado de admin */}
                                 {isAdmin && (
                                     <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
                                         Acceso Completo
@@ -225,122 +200,24 @@ const AdminPanel = () => {
                     </div>
                 </header>
 
-                {/* Dashboard Content */}
+                {/* Main Content Area */}
                 <main className="flex-1 p-6 overflow-auto bg-gray-900">
-                    {/* Dashboard */}
-                    {activeSection === 'dashboard' && (
-                        <div className="space-y-6">
-                            {/* Stats Cards */}
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                                <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-sm font-medium text-gray-400">Herramientas Disponibles</p>
-                                            <p className="text-3xl font-bold text-white mt-1">{dashboardData.herramientasDisponibles}</p>
-                                        </div>
-                                        <div className="bg-blue-600 p-3 rounded-lg">
-                                            <Wrench className="h-6 w-6 text-white" />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-sm font-medium text-gray-400">Préstamos Activos</p>
-                                            <p className="text-3xl font-bold text-white mt-1">{dashboardData.prestamosActivos}</p>
-                                        </div>
-                                        <div className="bg-green-600 p-3 rounded-lg">
-                                            <RefreshCw className="h-6 w-6 text-white" />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-sm font-medium text-gray-400">Clientes Activos</p>
-                                            <p className="text-3xl font-bold text-white mt-1">{dashboardData.clientesActivos}</p>
-                                        </div>
-                                        <div className="bg-purple-600 p-3 rounded-lg">
-                                            <Users className="h-6 w-6 text-white" />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="bg-gray-800 rounded-lg p-6 border border-gray-700">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-sm font-medium text-gray-400">Préstamos Atrasados</p>
-                                            <p className="text-3xl font-bold text-white mt-1">{dashboardData.prestamosAtrasados}</p>
-                                        </div>
-                                        <div className="bg-red-600 p-3 rounded-lg">
-                                            <AlertTriangle className="h-6 w-6 text-white" />
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Tables Section */}
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                                {/* Préstamos Recientes */}
-                                <div className="bg-gray-800 rounded-lg border border-gray-700">
-                                    <div className="p-6 border-b border-gray-700">
-                                        <h3 className="text-lg font-semibold text-white">Préstamos Recientes</h3>
-                                    </div>
-                                    <div className="p-6">
-                                        <div className="space-y-4">
-                                            {prestamosRecientes.map((prestamo, index) => (
-                                                <div key={index} className="flex items-center justify-between p-4 bg-gray-700 rounded-lg">
-                                                    <div>
-                                                        <p className="font-medium text-white">{prestamo.cliente}</p>
-                                                        <p className="text-sm text-gray-400">{prestamo.herramienta}</p>
-                                                    </div>
-                                                    <div className="text-right">
-                                                        <p className="text-sm text-gray-300">{prestamo.fecha}</p>
-                                                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                                            prestamo.estado === 'Activo'
-                                                                ? 'bg-green-100 text-green-800'
-                                                                : 'bg-red-100 text-red-800'
-                                                        }`}>
-                                                            {prestamo.estado}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Herramientas Más Prestadas */}
-                                <div className="bg-gray-800 rounded-lg border border-gray-700">
-                                    <div className="p-6 border-b border-gray-700">
-                                        <h3 className="text-lg font-semibold text-white">Herramientas Más Prestadas</h3>
-                                    </div>
-                                    <div className="p-6">
-                                        <div className="space-y-4">
-                                            {herramientasMasPrestadas.map((herramienta, index) => (
-                                                <div key={index} className="flex items-center justify-between">
-                                                    <span className="text-white font-medium">{herramienta.nombre}</span>
-                                                    <span className="text-gray-300 font-semibold">{herramienta.prestamos} préstamos</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-
                     {/* Gestión de Inventario - Solo para Administradores */}
                     {activeSection === 'inventario' && isAdmin && (
                         <InventoryManagement />
                     )}
 
-                    {/* Mensaje de acceso denegado para inventario */}
-                    {activeSection === 'inventario' && !isAdmin && (
+                    {/* Gestión de Clientes - Solo para Administradores */}
+                    {activeSection === 'clientes' && isAdmin && (
+                        <ClientManagement />
+                    )}
+
+                    {/* Mensaje de acceso denegado para secciones de admin */}
+                    {(activeSection === 'inventario' || activeSection === 'clientes') && !isAdmin && (
                         <div className="bg-gray-800 rounded-lg p-8 border border-gray-700 text-center">
-                            <h2 className="text-2xl font-bold text-white mb-4">Gestión de Inventario</h2>
+                            <h2 className="text-2xl font-bold text-white mb-4">
+                                {activeSection === 'inventario' ? 'Gestión de Inventario' : 'Gestión de Clientes'}
+                            </h2>
                             <p className="text-gray-400 mb-4">
                                 No tienes permisos para acceder a esta sección. Solo disponible para Administradores.
                             </p>
@@ -353,18 +230,18 @@ const AdminPanel = () => {
                         </div>
                     )}
 
-                    {/* Otras secciones */}
-                    {activeSection !== 'dashboard' && activeSection !== 'inventario' && (
+                    {/* Todas las demás secciones - Mensaje genérico "En desarrollo" */}
+                    {!['inventario', 'clientes'].includes(activeSection) && (
                         <div className="bg-gray-800 rounded-lg p-8 border border-gray-700 text-center">
                             <h2 className="text-2xl font-bold text-white mb-4">
                                 {getMenuItems().find(item => item.id === activeSection)?.label}
                             </h2>
                             <p className="text-gray-400">
-                                {!isAdmin && ['clientes', 'tarifas', 'kardex', 'usuarios'].includes(activeSection)
+                                {!isAdmin && ['tarifas', 'kardex', 'usuarios'].includes(activeSection)
                                     ? 'No tienes permisos para acceder a esta sección. Solo disponible para Administradores.'
-                                    : 'Contenido de la sección en desarrollo...'}
+                                    : 'Sección en desarrollo...'}
                             </p>
-                            {!isAdmin && ['clientes', 'tarifas', 'kardex', 'usuarios'].includes(activeSection) && (
+                            {!isAdmin && ['tarifas', 'kardex', 'usuarios'].includes(activeSection) && (
                                 <button
                                     onClick={() => setActiveSection('dashboard')}
                                     className="mt-4 bg-orange-600 text-white py-2 px-6 rounded-lg hover:bg-orange-700 transition-colors"
