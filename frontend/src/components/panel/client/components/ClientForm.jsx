@@ -32,11 +32,67 @@ const ClientForm = ({
         }
     }, [mode, client]);
 
+    const formatRUTInput = (value) => {
+        if (!value) return '';
+
+        // Limpiar entrada manteniendo solo números y K
+        const cleaned = value.replace(/[^0-9kK]/g, '').toUpperCase();
+
+        if (cleaned.length <= 1) return cleaned;
+
+        // Separar cuerpo y posible dígito verificador
+        const body = cleaned.slice(0, -1);
+        const lastChar = cleaned.slice(-1);
+
+        // Formatear cuerpo con puntos
+        const formattedBody = body.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+
+        // Si hay suficientes caracteres, agregar el guión
+        if (cleaned.length > 7) {
+            return `${formattedBody}-${lastChar}`;
+        }
+
+        return formattedBody + lastChar;
+    };
+
+    const formatPhoneInput = (value) => {
+        if (!value) return '';
+
+        // Limpiar entrada manteniendo solo números
+        const cleaned = value.replace(/[^0-9]/g, '');
+
+        if (cleaned.length <= 1) return cleaned;
+
+        // Formatear según longitud
+        if (cleaned.length === 9 && cleaned.startsWith('9')) {
+            // Celular: 9 1234 5678
+            return cleaned.replace(/(\d{1})(\d{4})(\d{4})/, '$1 $2 $3');
+        } else if (cleaned.length === 8) {
+            // Fijo: 22 1234 5678
+            return cleaned.replace(/(\d{2})(\d{4})(\d{4})/, '$1 $2 $3');
+        } else if (cleaned.length > 4) {
+            // Formateo progresivo
+            return cleaned.replace(/(\d{2})(\d{4})/, '$1 $2');
+        }
+
+        return cleaned;
+    };
+
     const handleInputChange = (e) => {
         const { name, value } = e.target;
+
+        let formattedValue = value;
+
+        // Aplicar formateo según el campo
+        if (name === 'rut') {
+            formattedValue = formatRUTInput(value);
+        } else if (name === 'phone') {
+            formattedValue = formatPhoneInput(value);
+        }
+
         setFormData(prev => ({
             ...prev,
-            [name]: value
+            [name]: formattedValue
         }));
 
         // Limpiar error del servidor cuando el usuario cambie el campo
