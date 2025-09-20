@@ -43,7 +43,6 @@ const TestComponent = () => {
 
 // App principal envuelto en AuthProvider y Router
 function App() {
-    // Esta línea estaba causando el problema - ahora está comentada
     // return <TestComponent />;
 
     try {
