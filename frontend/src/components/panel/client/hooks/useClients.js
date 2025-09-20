@@ -27,6 +27,22 @@ export const useClients = () => {
         setError(null);
     }, []);
 
+    // Función auxiliar para manejar errores HTTP
+    const handleHttpError = async (response) => {
+        let errorMessage = `Error HTTP: ${response.status}`;
+
+        try {
+            const errorText = await response.text();
+            if (errorText) {
+                errorMessage = errorText;
+            }
+        } catch (e) {
+            // Si no se puede leer el texto del error, usar el mensaje por defecto
+        }
+
+        return errorMessage;
+    };
+
     // Cargar todos los clientes - El backend decide qué devolver
     const loadClients = useCallback(async () => {
         setLoading(true);
@@ -42,12 +58,11 @@ export const useClients = () => {
             }
 
             if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+                const errorMsg = await handleHttpError(response);
+                throw new Error(errorMsg);
             }
 
             const data = await response.json();
-            // Usar los datos exactamente como los devuelve el backend
-            // El backend ya formateó RUT, normalizó teléfonos, etc.
             setClients(data);
         } catch (err) {
             setError(err.message || 'Error al cargar clientes');
@@ -65,21 +80,20 @@ export const useClients = () => {
             const response = await fetch(`${API_BASE_URL}/client/`, {
                 method: 'POST',
                 headers: getAuthHeaders(),
-                body: JSON.stringify(clientData), // Datos tal como los ingresó el usuario
+                body: JSON.stringify(clientData),
             });
 
             if (response.status === 409) {
-                const errorText = await response.text();
-                throw new Error(errorText || 'Ya existe un cliente con estos datos');
+                const errorText = await handleHttpError(response);
+                throw new Error(errorText);
             }
 
             if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText || `Error HTTP: ${response.status}`);
+                const errorText = await handleHttpError(response);
+                throw new Error(errorText);
             }
 
             const newClient = await response.json();
-            // El backend devuelve el cliente con datos normalizados y formateados
             setClients(prev => [...prev, newClient]);
             return newClient;
         } catch (err) {
@@ -98,7 +112,7 @@ export const useClients = () => {
             const response = await fetch(`${API_BASE_URL}/client/${clientId}`, {
                 method: 'PUT',
                 headers: getAuthHeaders(),
-                body: JSON.stringify(clientData), // Datos crudos del formulario
+                body: JSON.stringify(clientData),
             });
 
             if (response.status === 404) {
@@ -106,12 +120,11 @@ export const useClients = () => {
             }
 
             if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText || `Error HTTP: ${response.status}`);
+                const errorText = await handleHttpError(response);
+                throw new Error(errorText);
             }
 
             const updatedClient = await response.json();
-            // Backend devuelve cliente actualizado con datos procesados
             setClients(prev =>
                 prev.map(client =>
                     client.id === clientId ? updatedClient : client
@@ -141,11 +154,10 @@ export const useClients = () => {
             }
 
             if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText || `Error HTTP: ${response.status}`);
+                const errorText = await handleHttpError(response);
+                throw new Error(errorText);
             }
 
-            // Solo actualizar UI si el backend confirmó la eliminación
             setClients(prev => prev.filter(client => client.id !== clientId));
             return true;
         } catch (err) {
@@ -161,14 +173,11 @@ export const useClients = () => {
         setLoading(true);
         setError(null);
         try {
-            // Obtener cliente actual
             const currentClient = clients.find(c => c.id === clientId);
             if (!currentClient) {
                 throw new Error('Cliente no encontrado en caché local');
             }
 
-            // Enviar cliente completo con nuevo estado
-            // El backend decidirá si el cambio es válido
             const updatedClientData = {
                 ...currentClient,
                 status: newStatus
@@ -185,12 +194,11 @@ export const useClients = () => {
             }
 
             if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText || `Error HTTP: ${response.status}`);
+                const errorText = await handleHttpError(response);
+                throw new Error(errorText);
             }
 
             const updatedClient = await response.json();
-            // Backend confirmó el cambio y devolvió el estado actualizado
             setClients(prev =>
                 prev.map(client =>
                     client.id === clientId ? updatedClient : client
@@ -206,11 +214,9 @@ export const useClients = () => {
     }, [clients, getAuthHeaders]);
 
     // Filtrar clientes - Solo filtrado básico en frontend
-    // Para filtros complejos, debería hacerse en backend con endpoints específicos
     const filterClients = useCallback((searchTerm, statusFilter) => {
         let filtered = [...clients];
 
-        // Filtro de búsqueda básico
         if (searchTerm && searchTerm.trim() !== '') {
             const term = searchTerm.toLowerCase().trim();
             filtered = filtered.filter(client =>
@@ -221,7 +227,6 @@ export const useClients = () => {
             );
         }
 
-        // Filtro por estado
         if (statusFilter && statusFilter !== 'ALL') {
             filtered = filtered.filter(client => client.status === statusFilter);
         }
@@ -234,7 +239,6 @@ export const useClients = () => {
         setLoading(true);
         setError(null);
         try {
-            // El backend normaliza y valida el RUT
             const response = await fetch(`${API_BASE_URL}/client/rut/${encodeURIComponent(rut)}`, {
                 headers: getAuthHeaders()
             });
@@ -244,12 +248,12 @@ export const useClients = () => {
             }
 
             if (!response.ok) {
-                const errorText = await response.text();
-                throw new Error(errorText || `Error HTTP: ${response.status}`);
+                const errorText = await handleHttpError(response);
+                throw new Error(errorText);
             }
 
             const client = await response.json();
-            return client; // Cliente con datos formateados por el backend
+            return client;
         } catch (err) {
             setError(err.message);
             return null;

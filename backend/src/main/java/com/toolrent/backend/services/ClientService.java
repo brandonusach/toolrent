@@ -18,7 +18,13 @@ public class ClientService {
     }
 
     public ClientEntity getClientByRut(String rut) {
-        return clientRepository.findByRut(rut);
+        if (rut == null || rut.trim().isEmpty()) {
+            return null;
+        }
+
+        // Normalizar el RUT antes de buscar
+        String normalizedRut = normalizeRut(rut);
+        return clientRepository.findByRut(normalizedRut);
     }
 
     public List<ClientEntity> getClientsByStatus(ClientEntity.ClientStatus status) {
@@ -31,7 +37,12 @@ public class ClientService {
 
     // Check if client exists by RUT
     public boolean existsByRut(String rut) {
-        return clientRepository.existsByRut(rut);
+        if (rut == null || rut.trim().isEmpty()) {
+            return false;
+        }
+        // Normalizar el RUT antes de verificar
+        String normalizedRut = normalizeRut(rut);
+        return clientRepository.existsByRut(normalizedRut);
     }
 
     // CREATE - Save new client with business validations
