@@ -1,7 +1,6 @@
 package com.toolrent.backend.services;
 
 import com.toolrent.backend.entities.RateEntity;
-import com.toolrent.backend.entities.UserEntity;
 import com.toolrent.backend.repositories.RateRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,11 +23,8 @@ public class RateService {
     // RF4.1: Configurar tarifa diaria de arriendo (solo Administrador)
     // RF4.2: Configurar tarifa diaria de multa por atraso (solo Administrador)
     @Transactional
-    public RateEntity createRate(RateEntity rate, UserEntity createdBy) {
+    public RateEntity createRate(RateEntity rate) {
         validateRateCreation(rate);
-
-        // Set createdBy user
-        rate.setCreatedBy(createdBy);
 
         // Deactivate other rates of same type that overlap
         deactivateOverlappingRates(rate);
@@ -83,7 +79,7 @@ public class RateService {
 
     // Update rate (only Administrators)
     @Transactional
-    public RateEntity updateRate(Long id, RateEntity rateDetails, UserEntity updatedBy) {
+    public RateEntity updateRate(Long id, RateEntity rateDetails) {
         RateEntity rate = getRateById(id);
 
         validateRateUpdate(rate, rateDetails);

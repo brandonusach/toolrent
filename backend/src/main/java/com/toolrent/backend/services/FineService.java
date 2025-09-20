@@ -49,7 +49,7 @@ public class FineService {
 
     // Mark fine as paid
     @Transactional
-    public FineEntity payFine(Long fineId, UserEntity paidBy) throws Exception {
+    public FineEntity payFine(Long fineId) throws Exception {
         FineEntity fine = fineRepository.findById(fineId)
                 .orElseThrow(() -> new Exception("Fine not found with ID: " + fineId));
 
@@ -67,7 +67,7 @@ public class FineService {
     }
 
     // Create late return fine
-    public FineEntity createLateFine(LoanEntity loan, long daysLate, BigDecimal dailyLateFee, UserEntity createdBy) throws Exception {
+    public FineEntity createLateFine(LoanEntity loan, long daysLate, BigDecimal dailyLateFee) throws Exception {
         BigDecimal totalAmount = dailyLateFee.multiply(BigDecimal.valueOf(daysLate));
 
         FineEntity fine = new FineEntity();
@@ -76,33 +76,30 @@ public class FineService {
         fine.setType(FineEntity.FineType.LATE_RETURN);
         fine.setAmount(totalAmount);
         fine.setDescription("Multa por devolución tardía: " + daysLate + " días × $" + dailyLateFee + " = $" + totalAmount);
-        fine.setCreatedBy(createdBy);
 
         return createFine(fine);
     }
 
     // Create damage repair fine
-    public FineEntity createDamageFine(LoanEntity loan, BigDecimal repairCost, String damageDescription, UserEntity createdBy) throws Exception {
+    public FineEntity createDamageFine(LoanEntity loan, BigDecimal repairCost, String damageDescription) throws Exception {
         FineEntity fine = new FineEntity();
         fine.setClient(loan.getClient());
         fine.setLoan(loan);
         fine.setType(FineEntity.FineType.DAMAGE_REPAIR);
         fine.setAmount(repairCost);
         fine.setDescription("Multa por daño en herramienta: " + damageDescription);
-        fine.setCreatedBy(createdBy);
 
         return createFine(fine);
     }
 
     // Create tool replacement fine
-    public FineEntity createReplacementFine(LoanEntity loan, BigDecimal replacementValue, UserEntity createdBy) throws Exception {
+    public FineEntity createReplacementFine(LoanEntity loan, BigDecimal replacementValue) throws Exception {
         FineEntity fine = new FineEntity();
         fine.setClient(loan.getClient());
         fine.setLoan(loan);
         fine.setType(FineEntity.FineType.TOOL_REPLACEMENT);
         fine.setAmount(replacementValue);
         fine.setDescription("Costo de reposición por herramienta dañada irreparablemente: " + loan.getTool().getName());
-        fine.setCreatedBy(createdBy);
 
         return createFine(fine);
     }
@@ -204,7 +201,7 @@ public class FineService {
 
     // Cancel unpaid fine (admin only)
     @Transactional
-    public void cancelFine(Long fineId, UserEntity cancelledBy) throws Exception {
+    public void cancelFine(Long fineId) throws Exception {
         FineEntity fine = getFineById(fineId);
 
         if (fine.getPaid()) {
@@ -215,7 +212,6 @@ public class FineService {
         fine.setAmount(BigDecimal.ZERO);
         fine.setPaid(true);
         fine.setPaidDate(LocalDate.now());
-        fine.setDescription(fine.getDescription() + " - CANCELADA por " + cancelledBy.getUsername());
 
         fineRepository.save(fine);
 
@@ -252,9 +248,6 @@ public class FineService {
             throw new Exception("Fine description is required");
         }
 
-        if (fine.getCreatedBy() == null) {
-            throw new Exception("CreatedBy user is required for fine");
-        }
     }
 
     // Update client status based on unpaid fines
@@ -278,7 +271,7 @@ public class FineService {
 
     // Delete fine (only for unpaid fines and admin use)
     @Transactional
-    public void deleteFine(Long fineId, UserEntity deletedBy) throws Exception {
+    public void deleteFine(Long fineId ) throws Exception {
         FineEntity fine = getFineById(fineId);
 
         if (fine.getPaid()) {

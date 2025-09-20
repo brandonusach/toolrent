@@ -41,10 +41,6 @@ public class KardexMovementEntity {
     @Column(length = 500)
     private String description;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "created_by", nullable = false)
-    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
-    private UserEntity createdBy;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "related_loan_id")
@@ -97,23 +93,20 @@ public class KardexMovementEntity {
 
     // Constructor for creating movements
     public KardexMovementEntity(ToolEntity tool, MovementType type, Integer quantity,
-                                Integer stockBefore, Integer stockAfter, String description,
-                                UserEntity createdBy, LoanEntity relatedLoan) {
+                                Integer stockBefore, Integer stockAfter, String description, LoanEntity relatedLoan) {
         this.tool = tool;
         this.type = type;
         this.quantity = quantity;
         this.stockBefore = stockBefore;
         this.stockAfter = stockAfter;
         this.description = description;
-        this.createdBy = createdBy;
         this.relatedLoan = relatedLoan;
         this.createdAt = LocalDateTime.now();
     }
 
     // Constructor without loan relation
     public KardexMovementEntity(ToolEntity tool, MovementType type, Integer quantity,
-                                Integer stockBefore, Integer stockAfter, String description,
-                                UserEntity createdBy) {
-        this(tool, type, quantity, stockBefore, stockAfter, description, createdBy, null);
+                                Integer stockBefore, Integer stockAfter, String description) {
+        this(tool, type, quantity, stockBefore, stockAfter, description, null);
     }
 }

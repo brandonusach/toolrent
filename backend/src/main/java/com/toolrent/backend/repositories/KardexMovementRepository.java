@@ -3,7 +3,6 @@ package com.toolrent.backend.repositories;
 import com.toolrent.backend.entities.KardexMovementEntity;
 import com.toolrent.backend.entities.ToolEntity;
 import com.toolrent.backend.entities.LoanEntity;
-import com.toolrent.backend.entities.UserEntity;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -51,10 +50,6 @@ public interface KardexMovementRepository extends JpaRepository<KardexMovementEn
     // Query movements by related loan ID
     @Query("SELECT k FROM KardexMovementEntity k WHERE k.relatedLoan.id = :loanId ORDER BY k.createdAt DESC")
     List<KardexMovementEntity> findByRelatedLoanIdOrderByCreatedAtDesc(@Param("loanId") Long loanId);
-
-    // Query movements by user who created them
-    @Query("SELECT k FROM KardexMovementEntity k WHERE k.createdBy = :user ORDER BY k.createdAt DESC")
-    List<KardexMovementEntity> findByCreatedByOrderByCreatedAtDesc(@Param("user") UserEntity user);
 
     // Query latest movements (for dashboard)
     @Query("SELECT k FROM KardexMovementEntity k ORDER BY k.createdAt DESC")
@@ -104,15 +99,6 @@ public interface KardexMovementRepository extends JpaRepository<KardexMovementEn
     // Count movements by type for a specific tool
     @Query("SELECT COUNT(k) FROM KardexMovementEntity k WHERE k.tool.id = :toolId AND k.type = :type")
     long countMovementsByToolAndType(@Param("toolId") Long toolId, @Param("type") KardexMovementEntity.MovementType type);
-
-    // Get movements for audit trail (with full details)
-    @Query("SELECT k FROM KardexMovementEntity k JOIN FETCH k.tool JOIN FETCH k.createdBy LEFT JOIN FETCH k.relatedLoan ORDER BY k.createdAt DESC")
-    List<KardexMovementEntity> findAllWithDetails();
-
-    // Get movements with details by date range (for reports)
-    @Query("SELECT k FROM KardexMovementEntity k JOIN FETCH k.tool JOIN FETCH k.createdBy LEFT JOIN FETCH k.relatedLoan WHERE k.createdAt >= :startDate AND k.createdAt <= :endDate ORDER BY k.createdAt DESC")
-    List<KardexMovementEntity> findByDateRangeWithDetails(@Param("startDate") LocalDateTime startDate,
-                                                          @Param("endDate") LocalDateTime endDate);
 
     // Check if a tool has any movements (before allowing deletion)
     @Query("SELECT COUNT(k) > 0 FROM KardexMovementEntity k WHERE k.tool.id = :toolId")

@@ -2,10 +2,8 @@ package com.toolrent.backend.controllers;
 
 import com.toolrent.backend.entities.FineEntity;
 import com.toolrent.backend.entities.ClientEntity;
-import com.toolrent.backend.entities.UserEntity;
 import com.toolrent.backend.services.FineService;
 import com.toolrent.backend.services.ClientService;
-import com.toolrent.backend.services.UserService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -23,12 +21,10 @@ public class FineController {
 
     private final FineService fineService;
     private final ClientService clientService;
-    private final UserService userService;
 
-    public FineController(FineService fineService, ClientService clientService, UserService userService) {
+    public FineController(FineService fineService, ClientService clientService) {
         this.fineService = fineService;
         this.clientService = clientService;
-        this.userService = userService;
     }
 
     // GET /api/fines - Get all fines
@@ -63,16 +59,8 @@ public class FineController {
             if (fine.getClient() == null || fine.getClient().getId() == null) {
                 return new ResponseEntity<>("Client ID is required", HttpStatus.BAD_REQUEST);
             }
-            if (fine.getCreatedBy() == null || fine.getCreatedBy().getId() == null) {
-                return new ResponseEntity<>("CreatedBy user ID is required", HttpStatus.BAD_REQUEST);
-            }
-
             ClientEntity client = clientService.getClientById(fine.getClient().getId());
-            UserEntity createdBy = userService.getUserById(fine.getCreatedBy().getId())
-                    .orElseThrow(() -> new RuntimeException("User not found with ID: " + fine.getCreatedBy().getId()));
-
             fine.setClient(client);
-            fine.setCreatedBy(createdBy);
 
             FineEntity createdFine = fineService.createFine(fine);
             return new ResponseEntity<>(createdFine, HttpStatus.CREATED);
@@ -89,13 +77,7 @@ public class FineController {
     public ResponseEntity<?> payFine(@PathVariable Long id,
                                      @RequestParam(required = false) Long paidByUserId) {
         try {
-            UserEntity paidBy = null;
-            if (paidByUserId != null) {
-                paidBy = userService.getUserById(paidByUserId)
-                        .orElseThrow(() -> new RuntimeException("User not found with ID: " + paidByUserId));
-            }
-
-            FineEntity paidFine = fineService.payFine(id, paidBy);
+            FineEntity paidFine = fineService.payFine(id);
             return new ResponseEntity<>(paidFine, HttpStatus.OK);
         } catch (RuntimeException e) {
             return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);
@@ -109,9 +91,7 @@ public class FineController {
     @PutMapping("/{id}/cancel")
     public ResponseEntity<?> cancelFine(@PathVariable Long id, @RequestParam Long cancelledByUserId) {
         try {
-            UserEntity cancelledBy = userService.getUserById(cancelledByUserId)
-                    .orElseThrow(() -> new RuntimeException("User not found with ID: " + cancelledByUserId));
-            fineService.cancelFine(id, cancelledBy);
+            fineService.cancelFine(id);
             return new ResponseEntity<>("Fine cancelled successfully", HttpStatus.OK);
         } catch (RuntimeException e) {
             return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);
@@ -254,9 +234,7 @@ public class FineController {
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteFine(@PathVariable Long id, @RequestParam Long deletedByUserId) {
         try {
-            UserEntity deletedBy = userService.getUserById(deletedByUserId)
-                    .orElseThrow(() -> new RuntimeException("User not found with ID: " + deletedByUserId));
-            fineService.deleteFine(id, deletedBy);
+            fineService.deleteFine(id);
             return new ResponseEntity<>("Fine deleted successfully", HttpStatus.OK);
         } catch (RuntimeException e) {
             return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);

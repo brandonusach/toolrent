@@ -36,10 +36,10 @@ public class DamageService {
     // Report initial damage when tool is returned
     @Transactional
     public DamageEntity reportDamage(LoanEntity loan, ToolInstanceEntity toolInstance,
-                                     String description, UserEntity reportedBy) {
-        validateDamageReport(loan, toolInstance, reportedBy);
+                                     String description) {
+        validateDamageReport(loan, toolInstance);
 
-        DamageEntity damage = new DamageEntity(loan, toolInstance, description, reportedBy);
+        DamageEntity damage = new DamageEntity(loan, toolInstance, description);
 
         // Update tool instance status to UNDER_REPAIR
         toolInstanceService.updateInstanceStatus(toolInstance.getId(),
@@ -52,7 +52,7 @@ public class DamageService {
     @Transactional
     public DamageEntity assessDamage(Long damageId, DamageEntity.DamageType damageType,
                                      String assessmentDescription, BigDecimal repairCost,
-                                     Boolean isRepairable, UserEntity assessor) throws Exception {
+                                     Boolean isRepairable) throws Exception {
 
         DamageEntity damage = getDamageById(damageId);
 
@@ -61,7 +61,7 @@ public class DamageService {
         }
 
         // Update damage assessment
-        damage.assessDamage(damageType, assessmentDescription, repairCost, isRepairable, assessor);
+        damage.assessDamage(damageType, assessmentDescription, repairCost, isRepairable);
 
         // Handle different damage types
         if (!isRepairable || damageType == DamageEntity.DamageType.IRREPARABLE) {
@@ -93,7 +93,6 @@ public class DamageService {
         kardexMovementService.createRepairMovement(
                 damage.getToolInstance().getTool(),
                 "Repair started for damage #" + damage.getId(),
-                damage.getAssessedBy(),
                 damage.getToolInstance().getId()
         );
 
@@ -102,7 +101,7 @@ public class DamageService {
 
     // Complete repair process
     @Transactional
-    public DamageEntity completeRepair(Long damageId, UserEntity completedBy) throws Exception {
+    public DamageEntity completeRepair(Long damageId ) throws Exception {
         DamageEntity damage = getDamageById(damageId);
 
         if (!damage.isUnderRepair()) {
@@ -277,15 +276,12 @@ public class DamageService {
 
     // ========== PRIVATE HELPER METHODS ==========
 
-    private void validateDamageReport(LoanEntity loan, ToolInstanceEntity toolInstance, UserEntity reportedBy) {
+    private void validateDamageReport(LoanEntity loan, ToolInstanceEntity toolInstance) {
         if (loan == null) {
             throw new RuntimeException("Loan is required for damage report");
         }
         if (toolInstance == null) {
             throw new RuntimeException("Tool instance is required for damage report");
-        }
-        if (reportedBy == null) {
-            throw new RuntimeException("User reporting damage is required");
         }
 
         // Verify tool instance belongs to the loan's tool
@@ -294,7 +290,6 @@ public class DamageService {
         }
     }
 
-    @Transactional
     private void handleIrreparableDamage(DamageEntity damage) throws Exception {
         // Mark damage as irreparable
         damage.markAsIrreparable();
@@ -307,7 +302,6 @@ public class DamageService {
                 damage.getToolInstance().getTool(),
                 1,
                 "Tool instance decommissioned due to irreparable damage #" + damage.getId(),
-                damage.getAssessedBy(),
                 List.of(damage.getToolInstance().getId())
         );
 
@@ -328,7 +322,6 @@ public class DamageService {
             fine.setDescription("Repair cost for damage to " + damage.getToolInstance().getTool().getName());
             fine.setPaid(false);
             fine.setDueDate(java.time.LocalDate.now().plusDays(30));
-            fine.setCreatedBy(damage.getAssessedBy());
 
             fineRepository.save(fine);
         }
@@ -346,7 +339,7 @@ public class DamageService {
                 damage.getToolInstance().getTool().getName());
         fine.setPaid(false);
         fine.setDueDate(java.time.LocalDate.now().plusDays(30));
-        fine.setCreatedBy(damage.getAssessedBy());
+
 
         fineRepository.save(fine);
     }

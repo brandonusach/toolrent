@@ -35,9 +35,6 @@ public class RateEntity {
     @Column(name = "effective_to")
     private LocalDate effectiveTo;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "created_by", nullable = false)
-    private UserEntity createdBy;
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;

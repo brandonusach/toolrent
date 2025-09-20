@@ -38,10 +38,6 @@ public class LoanEntity {
     @Column(name = "actual_return_date")
     private LocalDate actualReturnDate;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "created_by", nullable = false)
-    private UserEntity createdBy;
-
     @Column(name = "daily_rate", nullable = false, precision = 10, scale = 2)
     private BigDecimal dailyRate;
 

@@ -70,7 +70,6 @@ public class LoanService {
                     KardexMovementEntity.MovementType.LOAN,
                     loan.getQuantity(),
                     "Préstamo #" + savedLoan.getId() + " - Cliente: " + loan.getClient().getName(),
-                    loan.getCreatedBy(),
                     savedLoan
             );
         } catch (Exception e) {
@@ -130,7 +129,6 @@ public class LoanService {
                     loan.getQuantity(),
                     "Devolución préstamo #" + loan.getId() + " - " +
                             (damaged ? "Con daños" : "En buen estado"),
-                    loan.getCreatedBy(),
                     loan
             );
         } catch (Exception e) {
@@ -188,9 +186,6 @@ public class LoanService {
         }
         if (loan.getAgreedReturnDate() == null) {
             throw new Exception("Agreed return date is required");
-        }
-        if (loan.getCreatedBy() == null) {
-            throw new Exception("User creating loan is required");
         }
 
         // BR: Client must be ACTIVE (not restricted)
@@ -282,7 +277,6 @@ public class LoanService {
         fine.setDescription(description);
         fine.setPaid(false);
         fine.setDueDate(LocalDate.now().plusDays(30)); // 30 days to pay
-        fine.setCreatedBy(loan.getCreatedBy());
 
         return fineRepository.save(fine);
     }

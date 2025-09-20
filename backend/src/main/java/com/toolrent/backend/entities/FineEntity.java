@@ -46,10 +46,6 @@ public class FineEntity {
     @Column(name = "paid_date")
     private LocalDate paidDate;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "created_by", nullable = false)
-    private UserEntity createdBy;
-
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

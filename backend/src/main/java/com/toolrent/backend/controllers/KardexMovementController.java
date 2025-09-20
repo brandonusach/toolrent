@@ -3,7 +3,6 @@ package com.toolrent.backend.controllers;
 import com.toolrent.backend.entities.*;
 import com.toolrent.backend.services.KardexMovementService;
 import com.toolrent.backend.services.ToolService;
-import com.toolrent.backend.services.UserService; // Assuming this exists
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -42,13 +41,9 @@ public class KardexMovementController {
             ToolEntity tool = toolService.getToolById(toolId)
                     .orElseThrow(() -> new RuntimeException("Tool not found"));
 
-            // For now, create a dummy user entity. Replace with actual UserService call
-            UserEntity user = new UserEntity();
-            user.setId(userId);
-            // user = userService.getUserById(userId); // Use this when UserService is available
 
             KardexMovementEntity movement = kardexMovementService.createInitialStockMovement(
-                    tool, quantity, user);
+                    tool, quantity);
 
             return new ResponseEntity<>(movement, HttpStatus.CREATED);
         } catch (RuntimeException e) {
@@ -66,15 +61,12 @@ public class KardexMovementController {
             Long toolId = Long.valueOf(request.get("toolId").toString());
             Integer quantity = Integer.valueOf(request.get("quantity").toString());
             String description = (String) request.get("description");
-            Long userId = Long.valueOf(request.get("userId").toString());
             Long loanId = request.get("loanId") != null ?
                     Long.valueOf(request.get("loanId").toString()) : null;
 
             ToolEntity tool = toolService.getToolById(toolId)
                     .orElseThrow(() -> new RuntimeException("Tool not found"));
 
-            UserEntity user = new UserEntity();
-            user.setId(userId);
 
             LoanEntity loan = null;
             if (loanId != null) {
@@ -84,7 +76,7 @@ public class KardexMovementController {
             }
 
             KardexMovementEntity movement = kardexMovementService.createLoanMovement(
-                    tool, quantity, description, user, loan);
+                    tool, quantity, description, loan);
 
             return new ResponseEntity<>(movement, HttpStatus.CREATED);
         } catch (RuntimeException e) {
@@ -114,14 +106,11 @@ public class KardexMovementController {
             ToolEntity tool = toolService.getToolById(toolId)
                     .orElseThrow(() -> new RuntimeException("Tool not found"));
 
-            UserEntity user = new UserEntity();
-            user.setId(userId);
-
             LoanEntity loan = new LoanEntity();
             loan.setId(loanId);
 
             KardexMovementEntity movement = kardexMovementService.createReturnMovement(
-                    tool, quantity, description, user, loan, instanceIds, isDamaged);
+                    tool, quantity, description, loan, instanceIds, isDamaged);
 
             return new ResponseEntity<>(movement, HttpStatus.CREATED);
         } catch (RuntimeException e) {
@@ -147,11 +136,10 @@ public class KardexMovementController {
             ToolEntity tool = toolService.getToolById(toolId)
                     .orElseThrow(() -> new RuntimeException("Tool not found"));
 
-            UserEntity user = new UserEntity();
-            user.setId(userId);
+
 
             KardexMovementEntity movement = kardexMovementService.createDecommissionMovement(
-                    tool, quantity, description, user, instanceIds);
+                    tool, quantity, description, instanceIds);
 
             return new ResponseEntity<>(movement, HttpStatus.CREATED);
         } catch (RuntimeException e) {
@@ -174,11 +162,9 @@ public class KardexMovementController {
             ToolEntity tool = toolService.getToolById(toolId)
                     .orElseThrow(() -> new RuntimeException("Tool not found"));
 
-            UserEntity user = new UserEntity();
-            user.setId(userId);
 
             KardexMovementEntity movement = kardexMovementService.createRestockMovement(
-                    tool, quantity, description, user);
+                    tool, quantity, description);
 
             return new ResponseEntity<>(movement, HttpStatus.CREATED);
         } catch (RuntimeException e) {
@@ -202,11 +188,9 @@ public class KardexMovementController {
             ToolEntity tool = toolService.getToolById(toolId)
                     .orElseThrow(() -> new RuntimeException("Tool not found"));
 
-            UserEntity user = new UserEntity();
-            user.setId(userId);
 
             KardexMovementEntity movement = kardexMovementService.createRepairMovement(
-                    tool, description, user, instanceId);
+                    tool, description, instanceId);
 
             return new ResponseEntity<>(movement, HttpStatus.CREATED);
         } catch (RuntimeException e) {
@@ -397,8 +381,6 @@ public class KardexMovementController {
             ToolEntity tool = toolService.getToolById(toolId)
                     .orElseThrow(() -> new RuntimeException("Tool not found"));
 
-            UserEntity user = new UserEntity();
-            user.setId(userId);
 
             LoanEntity loan = null;
             if (loanId != null) {
@@ -410,7 +392,7 @@ public class KardexMovementController {
                     KardexMovementEntity.MovementType.valueOf(typeStr.toUpperCase());
 
             KardexMovementEntity movement = kardexMovementService.createMovement(
-                    tool, type, quantity, description, user, loan);
+                    tool, type, quantity, description, loan);
 
             return new ResponseEntity<>(movement, HttpStatus.CREATED);
         } catch (IllegalArgumentException e) {

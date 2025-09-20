@@ -48,10 +48,6 @@ public class DamageEntity {
     @Column(nullable = false)
     private DamageStatus status;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "assessed_by", nullable = false)
-    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
-    private UserEntity assessedBy;
 
     @Column(name = "reported_at", nullable = false)
     private LocalDateTime reportedAt;
@@ -88,12 +84,12 @@ public class DamageEntity {
 
     // Business methods
     public void assessDamage(DamageType type, String description, BigDecimal repairCost,
-                             Boolean isRepairable, UserEntity assessor) {
+                             Boolean isRepairable ) {
         this.type = type;
         this.description = description;
         this.repairCost = repairCost;
         this.isRepairable = isRepairable;
-        this.assessedBy = assessor;
+
         this.assessedAt = LocalDateTime.now();
         this.status = DamageStatus.ASSESSED;
     }
@@ -148,11 +144,10 @@ public class DamageEntity {
     }
 
     // Constructor for initial damage report
-    public DamageEntity(LoanEntity loan, ToolInstanceEntity toolInstance, String description, UserEntity reportedBy) {
+    public DamageEntity(LoanEntity loan, ToolInstanceEntity toolInstance, String description) {
         this.loan = loan;
         this.toolInstance = toolInstance;
         this.description = description;
-        this.assessedBy = reportedBy;
         this.status = DamageStatus.REPORTED;
         this.reportedAt = LocalDateTime.now();
         this.isRepairable = true; // Default to repairable until assessed

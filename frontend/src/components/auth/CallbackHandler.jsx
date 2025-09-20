@@ -1,21 +1,45 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from './AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { Shield, AlertCircle, CheckCircle } from 'lucide-react';
 
 const CallbackHandler = () => {
-    const { handleKeycloakCallback, isAuthenticated } = useAuth();
-    const [status, setStatus] = useState('processing'); // processing, success, error
+    const { handleKeycloakCallback, isAuthenticated, user } = useAuth();
+    const [status, setStatus] = useState('processing');
     const [message, setMessage] = useState('');
+    const [userInfo, setUserInfo] = useState(null);
+    const processedRef = useRef(false);
+    const navigate = useNavigate();
 
     useEffect(() => {
+        // Prevenir múltiples ejecuciones
+        if (processedRef.current) {
+            console.log('Callback ya procesado, ignorando...');
+            return;
+        }
+
         const processCallback = async () => {
+            // Marcar como procesado inmediatamente
+            processedRef.current = true;
+
             const urlParams = new URLSearchParams(window.location.search);
             const code = urlParams.get('code');
             const state = urlParams.get('state');
             const error = urlParams.get('error');
             const errorDescription = urlParams.get('error_description');
 
-            // Si hay error en la URL
+            console.log('CallbackHandler iniciando...');
+            console.log('Code:', code?.substring(0, 20) + '...');
+            console.log('State:', state);
+            console.log('Error:', error);
+
+            // Limpiar URL inmediatamente para prevenir reprocesamiento
+            const cleanUrl = () => {
+                const newUrl = window.location.pathname;
+                window.history.replaceState({}, document.title, newUrl);
+            };
+
+            // Si hay error en la URL de Keycloak
             if (error) {
                 let errorMessage = decodeURIComponent(error);
                 if (errorDescription) {
@@ -25,9 +49,11 @@ const CallbackHandler = () => {
                 setStatus('error');
                 setMessage(errorMessage);
 
+                cleanUrl();
+
                 // Redirigir después de mostrar el error
                 setTimeout(() => {
-                    window.location.href = '/';
+                    navigate('/', { replace: true });
                 }, 3000);
                 return;
             }
@@ -35,56 +61,82 @@ const CallbackHandler = () => {
             // Si no hay código, redirigir directamente
             if (!code) {
                 console.log('No hay código de autorización, redirigiendo...');
-                window.location.href = '/';
+                cleanUrl();
+                navigate('/', { replace: true });
                 return;
             }
 
-            // Procesar el código
+            // Procesar el código UNA SOLA VEZ
             try {
                 setStatus('processing');
                 setMessage('Validando código de autorización...');
 
-                console.log('CallbackHandler: Procesando código:', code.substring(0, 10) + '...');
+                console.log('Procesando código de autorización...');
 
                 const result = await handleKeycloakCallback(code, state);
 
                 if (result.success) {
                     setStatus('success');
                     setMessage('Autenticación exitosa. Redirigiendo...');
+                    setUserInfo(result.user);
+
+                    cleanUrl();
+
+                    console.log('=== LOGIN COMPLETADO ===');
+                    console.log('Usuario autenticado:', result.user?.username);
+                    console.log('Rol asignado:', result.user?.role);
 
                     // Redirigir al dashboard después de un breve delay
                     setTimeout(() => {
-                        window.location.href = '/';
+                        // Usar navigate en lugar de window.location para mejor control
+                        navigate('/', { replace: true, state: { loginSuccess: true } });
                     }, 1500);
                 } else {
                     setStatus('error');
                     setMessage(result.error || 'Error en la autenticación');
 
+                    cleanUrl();
+
                     // Redirigir al login con el error después de un delay
                     setTimeout(() => {
-                        window.location.href = '/?error=' + encodeURIComponent(result.error);
+                        navigate('/', {
+                            replace: true,
+                            state: { error: result.error }
+                        });
                     }, 3000);
                 }
             } catch (err) {
-                console.error('Error procesando callback:', err);
+                console.error('Exception en callback:', err);
                 setStatus('error');
                 setMessage('Error inesperado: ' + err.message);
 
+                cleanUrl();
+
                 setTimeout(() => {
-                    window.location.href = '/?error=' + encodeURIComponent('Error inesperado durante la autenticación');
+                    navigate('/', {
+                        replace: true,
+                        state: { error: 'Error inesperado durante la autenticación' }
+                    });
                 }, 3000);
             }
         };
 
-        processCallback();
-    }, [handleKeycloakCallback]);
+        // Pequeño delay para asegurar que el componente está montado
+        const timeoutId = setTimeout(processCallback, 100);
+
+        return () => {
+            clearTimeout(timeoutId);
+        };
+    }, [handleKeycloakCallback, navigate]);
 
     // Si ya está autenticado, redirigir inmediatamente
     useEffect(() => {
-        if (isAuthenticated && status === 'success') {
-            window.location.href = '/';
+        if (isAuthenticated && user && status === 'success') {
+            console.log('Usuario ya autenticado, redirigiendo al dashboard...');
+            console.log('Usuario:', user.username, 'Rol:', user.role);
+            navigate('/', { replace: true });
         }
-    }, [isAuthenticated, status]);
+    }, [isAuthenticated, user, status, navigate]);
 
     const getStatusIcon = () => {
         switch (status) {
@@ -154,10 +206,22 @@ const CallbackHandler = () => {
                         </p>
                     </div>
 
+                    {/* Información del usuario en caso de éxito */}
+                    {status === 'success' && userInfo && (
+                        <div className="bg-green-900/20 border border-green-800 p-4 rounded-lg mb-4">
+                            <p className="text-green-400 text-sm font-medium">
+                                ¡Bienvenido, {userInfo.username}!
+                            </p>
+                            <p className="text-green-300 text-xs">
+                                Rol: {userInfo.role}
+                            </p>
+                        </div>
+                    )}
+
                     {/* Información adicional según el estado */}
                     {status === 'processing' && (
                         <div className="text-gray-400 text-xs">
-                            <p>Esto puede tomar unos segundos...</p>
+                            <p>Validando con Keycloak...</p>
                             <p className="mt-1">No cierres esta ventana.</p>
                         </div>
                     )}
@@ -171,10 +235,12 @@ const CallbackHandler = () => {
 
                     {status === 'error' && (
                         <div className="text-red-400 text-xs">
-                            <p>Verifica tu conexión e intenta nuevamente.</p>
+                            <p>Error procesando la autenticación.</p>
                             <p className="mt-1">Serás redirigido al login en unos segundos.</p>
                             <button
-                                onClick={() => window.location.href = '/'}
+                                onClick={() => {
+                                    navigate('/', { replace: true });
+                                }}
                                 className="mt-3 text-orange-500 hover:text-orange-400 underline"
                             >
                                 Regresar ahora
@@ -183,13 +249,14 @@ const CallbackHandler = () => {
                     )}
 
                     {/* Debug info - solo en desarrollo */}
-                    {process.env.NODE_ENV === 'development' && (
+                    {import.meta.env.DEV && (
                         <div className="mt-6 bg-gray-800 p-3 rounded text-xs text-left">
                             <div className="text-gray-400 mb-1">Debug Info:</div>
                             <div className="text-gray-300">Status: {status}</div>
+                            <div className="text-gray-300">Processed: {processedRef.current ? 'Sí' : 'No'}</div>
                             <div className="text-gray-300">Authenticated: {isAuthenticated ? 'Sí' : 'No'}</div>
-                            <div className="text-gray-300">URL: {window.location.href}</div>
-                            <div className="text-gray-300">Params: {window.location.search || 'none'}</div>
+                            <div className="text-gray-300">User Role: {user?.role || 'none'}</div>
+                            <div className="text-gray-300">Original URL: {window.location.search || 'none'}</div>
                         </div>
                     )}
                 </div>

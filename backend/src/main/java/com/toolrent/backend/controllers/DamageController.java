@@ -4,7 +4,6 @@ import com.toolrent.backend.entities.*;
 import com.toolrent.backend.services.DamageService;
 import com.toolrent.backend.services.LoanService;
 import com.toolrent.backend.services.ToolInstanceService;
-import com.toolrent.backend.services.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
@@ -35,9 +34,6 @@ public class DamageController {
     @Autowired
     private ToolInstanceService toolInstanceService;
 
-    @Autowired
-    private UserService userService;
-
     // ========== DAMAGE REPORTING ENDPOINTS ==========
 
     @PostMapping("/report")
@@ -45,8 +41,6 @@ public class DamageController {
     public ResponseEntity<?> reportDamage(@RequestBody DamageReportRequest request,
                                           HttpServletRequest httpRequest) {
         try {
-            // Get current user
-            UserEntity currentUser = getCurrentUser(httpRequest);
 
             // Get loan and tool instance
             LoanEntity loan = loanService.getLoanById(request.getLoanId());
@@ -54,7 +48,7 @@ public class DamageController {
 
             // Report damage
             DamageEntity damage = damageService.reportDamage(loan, toolInstance,
-                    request.getDescription(), currentUser);
+                    request.getDescription());
 
             Map<String, Object> response = new HashMap<>();
             response.put("message", "Damage reported successfully");
@@ -77,15 +71,15 @@ public class DamageController {
                                           @RequestBody DamageAssessmentRequest request,
                                           HttpServletRequest httpRequest) {
         try {
-            UserEntity currentUser = getCurrentUser(httpRequest);
+
 
             DamageEntity damage = damageService.assessDamage(
                     damageId,
                     DamageEntity.DamageType.valueOf(request.getDamageType()),
                     request.getAssessmentDescription(),
                     request.getRepairCost(),
-                    request.getIsRepairable(),
-                    currentUser
+                    request.getIsRepairable()
+
             );
 
             Map<String, Object> response = new HashMap<>();
@@ -128,9 +122,8 @@ public class DamageController {
     public ResponseEntity<?> completeRepair(@PathVariable Long damageId,
                                             HttpServletRequest httpRequest) {
         try {
-            UserEntity currentUser = getCurrentUser(httpRequest);
-            DamageEntity damage = damageService.completeRepair(damageId, currentUser);
 
+            DamageEntity damage = damageService.completeRepair(damageId);
             Map<String, Object> response = new HashMap<>();
             response.put("message", "Repair completed successfully");
             response.put("damage", damage);
@@ -366,36 +359,6 @@ public class DamageController {
 
     // ========== PRIVATE HELPER METHODS ==========
 
-    private UserEntity getCurrentUser(HttpServletRequest request) {
-        // Implementation would extract user from JWT token or session
-        // For now, assuming user ID is in request header or session
-        String userId = request.getHeader("X-User-Id");
-        if (userId != null) {
-            try {
-                Optional<UserEntity> userOpt = userService.getUserById(Long.parseLong(userId));
-                if (userOpt.isPresent()) {
-                    return userOpt.get();
-                } else {
-                    throw new RuntimeException("User not found with ID: " + userId);
-                }
-            } catch (NumberFormatException e) {
-                throw new RuntimeException("Invalid user ID format: " + userId);
-            }
-        }
-
-        // Alternative: try to get user by username from header
-        String username = request.getHeader("X-Username");
-        if (username != null) {
-            Optional<UserEntity> userOpt = userService.getUserByUsername(username);
-            if (userOpt.isPresent()) {
-                return userOpt.get();
-            } else {
-                throw new RuntimeException("User not found with username: " + username);
-            }
-        }
-
-        throw new RuntimeException("User not authenticated - no user ID or username in headers");
-    }
 
     // ========== REQUEST/RESPONSE DTOs ==========
 

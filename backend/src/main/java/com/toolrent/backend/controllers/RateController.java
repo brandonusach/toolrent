@@ -1,9 +1,7 @@
 package com.toolrent.backend.controllers;
 
 import com.toolrent.backend.entities.RateEntity;
-import com.toolrent.backend.entities.UserEntity;
 import com.toolrent.backend.services.RateService;
-import com.toolrent.backend.services.UserService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
@@ -17,22 +15,16 @@ import java.util.List;
 public class RateController {
 
     private final RateService rateService;
-    private final UserService userService;
 
-    public RateController(RateService rateService, UserService userService) {
+    public RateController(RateService rateService) {
         this.rateService = rateService;
-        this.userService = userService;
     }
 
     // RF4.1, RF4.2, RF4.3: Crear tarifas (solo Administrador)
     @PostMapping
     @PreAuthorize("hasAuthority('ADMINISTRATOR')")
-    public ResponseEntity<RateEntity> createRate(@RequestBody RateEntity rate,
-                                                 @RequestHeader("X-User-Id") Long userId) {
-        UserEntity createdBy = userService.getUserById(userId)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-
-        RateEntity createdRate = rateService.createRate(rate, createdBy);
+    public ResponseEntity<RateEntity> createRate(@RequestBody RateEntity rate) {
+        RateEntity createdRate = rateService.createRate(rate);
         return ResponseEntity.ok(createdRate);
     }
 
@@ -82,12 +74,8 @@ public class RateController {
     @PutMapping("/{id}")
     @PreAuthorize("hasAuthority('ADMINISTRATOR')")
     public ResponseEntity<RateEntity> updateRate(@PathVariable Long id,
-                                                 @RequestBody RateEntity rateDetails,
-                                                 @RequestHeader("X-User-Id") Long userId) {
-        UserEntity updatedBy = userService.getUserById(userId)
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-
-        RateEntity updatedRate = rateService.updateRate(id, rateDetails, updatedBy);
+                                                 @RequestBody RateEntity rateDetails){
+        RateEntity updatedRate = rateService.updateRate(id, rateDetails);
         return ResponseEntity.ok(updatedRate);
     }
 

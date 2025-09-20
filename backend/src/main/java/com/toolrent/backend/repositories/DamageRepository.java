@@ -99,15 +99,6 @@ public interface DamageRepository extends JpaRepository<DamageEntity, Long> {
     @Query("SELECT YEAR(d.reportedAt), MONTH(d.reportedAt), COUNT(d) FROM DamageEntity d GROUP BY YEAR(d.reportedAt), MONTH(d.reportedAt) ORDER BY YEAR(d.reportedAt) DESC, MONTH(d.reportedAt) DESC")
     List<Object[]> getMonthlyDamageTrend();
 
-    // Find damages with details (for reports)
-    @Query("SELECT d FROM DamageEntity d JOIN FETCH d.loan JOIN FETCH d.toolInstance JOIN FETCH d.assessedBy ORDER BY d.reportedAt DESC")
-    List<DamageEntity> findAllWithDetails();
-
-    // Find damages with details by date range (for reports)
-    @Query("SELECT d FROM DamageEntity d JOIN FETCH d.loan JOIN FETCH d.toolInstance JOIN FETCH d.assessedBy WHERE d.reportedAt >= :startDate AND d.reportedAt <= :endDate ORDER BY d.reportedAt DESC")
-    List<DamageEntity> findByDateRangeWithDetails(@Param("startDate") LocalDateTime startDate,
-                                                  @Param("endDate") LocalDateTime endDate);
-
     // Find damages that need follow-up (assessed but not progressing)
     @Query("SELECT d FROM DamageEntity d WHERE d.status = 'ASSESSED' AND d.assessedAt < :cutoffDate ORDER BY d.assessedAt ASC")
     List<DamageEntity> findStagnantAssessments(@Param("cutoffDate") LocalDateTime cutoffDate);
@@ -128,10 +119,6 @@ public interface DamageRepository extends JpaRepository<DamageEntity, Long> {
     @Query("SELECT COALESCE(SUM(d.repairCost), 0) FROM DamageEntity d WHERE d.repairCost IS NOT NULL AND d.reportedAt >= :startDate AND d.reportedAt <= :endDate")
     java.math.BigDecimal calculateTotalRepairCostInPeriod(@Param("startDate") LocalDateTime startDate,
                                                           @Param("endDate") LocalDateTime endDate);
-
-    // Find damages by user who assessed them
-    @Query("SELECT d FROM DamageEntity d WHERE d.assessedBy.id = :userId ORDER BY d.reportedAt DESC")
-    List<DamageEntity> findByAssessedByIdOrderByReportedAtDesc(@Param("userId") Long userId);
 
     // Find damages requiring immediate attention (high priority)
     @Query("SELECT d FROM DamageEntity d WHERE (d.status = 'REPORTED' AND d.reportedAt < :urgentDate) OR (d.status = 'ASSESSED' AND d.isRepairable = true AND d.assessedAt < :urgentDate) ORDER BY d.reportedAt ASC")

@@ -83,10 +83,6 @@ public interface LoanRepository extends JpaRepository<LoanEntity, Long> {
     @Query("SELECT l FROM LoanEntity l JOIN FETCH l.client JOIN FETCH l.tool WHERE l.client = :client ORDER BY l.loanDate DESC")
     List<LoanEntity> findByClientWithDetails(@Param("client") ClientEntity client);
 
-    // Préstamos activos con detalles completos (para reportes)
-    @Query("SELECT l FROM LoanEntity l JOIN FETCH l.client JOIN FETCH l.tool JOIN FETCH l.createdBy WHERE l.status = 'ACTIVE'")
-    List<LoanEntity> findActiveLoansWithDetails();
-
     // Préstamos que vencen en un rango de fechas (para alertas)
     @Query("SELECT l FROM LoanEntity l WHERE l.status = 'ACTIVE' AND l.agreedReturnDate BETWEEN :startDate AND :endDate ORDER BY l.agreedReturnDate ASC")
     List<LoanEntity> findLoansDueInPeriod(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
