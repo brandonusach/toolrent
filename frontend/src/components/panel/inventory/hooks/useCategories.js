@@ -1,25 +1,19 @@
-// inventory/hooks/useCategories.js
+// hooks/useCategories.js - Version con Axios
 import { useState, useCallback } from 'react';
+import apiClient from '../../../../api/axiosConfig';
 
 export const useCategories = () => {
     const [categories, setCategories] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    const API_BASE = 'http://localhost:8081/api';
-
     // Cargar todas las categorías
     const loadCategories = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch(`${API_BASE}/categories`);
-            if (response.ok) {
-                const data = await response.json();
-                setCategories(data);
-            } else {
-                throw new Error(`Error ${response.status}: ${response.statusText}`);
-            }
+            const response = await apiClient.get('/categories');
+            setCategories(response.data || []);
         } catch (err) {
             console.error('Error loading categories:', err);
             setError(err.message);
@@ -32,76 +26,46 @@ export const useCategories = () => {
     // Crear nueva categoría
     const createCategory = useCallback(async (categoryData) => {
         try {
-            const response = await fetch(`${API_BASE}/categories`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(categoryData),
-            });
+            const response = await apiClient.post('/categories', categoryData);
+            const newCategory = response.data;
 
-            if (response.ok) {
-                const newCategory = await response.json();
-                setCategories(prevCategories => [...prevCategories, newCategory]);
-                return newCategory;
-            } else {
-                const errorText = await response.text();
-                throw new Error(errorText || 'Error al crear la categoría');
-            }
+            setCategories(prevCategories => [...prevCategories, newCategory]);
+            return newCategory;
         } catch (err) {
             console.error('Error creating category:', err);
-            throw err;
+            throw new Error(err.message || 'Error al crear la categoría');
         }
     }, []);
 
     // Actualizar categoría existente
     const updateCategory = useCallback(async (categoryId, categoryData) => {
         try {
-            const response = await fetch(`${API_BASE}/categories/${categoryId}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(categoryData),
-            });
+            const response = await apiClient.put(`/categories/${categoryId}`, categoryData);
+            const updatedCategory = response.data;
 
-            if (response.ok) {
-                const updatedCategory = await response.json();
-                setCategories(prevCategories =>
-                    prevCategories.map(category =>
-                        category.id === categoryId ? updatedCategory : category
-                    )
-                );
-                return updatedCategory;
-            } else {
-                const errorText = await response.text();
-                throw new Error(errorText || 'Error al actualizar la categoría');
-            }
+            setCategories(prevCategories =>
+                prevCategories.map(category =>
+                    category.id === categoryId ? updatedCategory : category
+                )
+            );
+            return updatedCategory;
         } catch (err) {
             console.error('Error updating category:', err);
-            throw err;
+            throw new Error(err.message || 'Error al actualizar la categoría');
         }
     }, []);
 
     // Eliminar categoría
     const deleteCategory = useCallback(async (categoryId) => {
         try {
-            const response = await fetch(`${API_BASE}/categories/${categoryId}`, {
-                method: 'DELETE'
-            });
-
-            if (response.ok) {
-                setCategories(prevCategories =>
-                    prevCategories.filter(category => category.id !== categoryId)
-                );
-                return true;
-            } else {
-                const errorText = await response.text();
-                throw new Error(errorText || 'Error al eliminar la categoría');
-            }
+            await apiClient.delete(`/categories/${categoryId}`);
+            setCategories(prevCategories =>
+                prevCategories.filter(category => category.id !== categoryId)
+            );
+            return true;
         } catch (err) {
             console.error('Error deleting category:', err);
-            throw err;
+            throw new Error(err.message || 'Error al eliminar la categoría');
         }
     }, []);
 
@@ -120,7 +84,6 @@ export const useCategories = () => {
     // Obtener estadísticas de categorías
     const getCategoryStats = useCallback(() => {
         const totalCategories = categories.length;
-        // Aquí podrías agregar más estadísticas si tienes información sobre herramientas por categoría
 
         return {
             totalCategories

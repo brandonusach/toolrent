@@ -1,130 +1,63 @@
+// hooks/useClients.js - Version con Axios
 import { useState, useCallback } from 'react';
-
-// Configuración de la API - El backend maneja toda la lógica
-const getApiBaseUrl = () => {
-    if (typeof process !== 'undefined' && process.env && process.env.REACT_APP_API_URL) {
-        return process.env.REACT_APP_API_URL;
-    }
-    return 'http://localhost:8081/api';
-};
-
-const API_BASE_URL = getApiBaseUrl();
+import apiClient from '../../../../api/axiosConfig';
 
 export const useClients = () => {
     const [clients, setClients] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // Headers básicos para las peticiones
-    const getAuthHeaders = useCallback(() => {
-        return {
-            'Content-Type': 'application/json',
-        };
-    }, []);
-
     // Función para limpiar errores
     const clearError = useCallback(() => {
         setError(null);
     }, []);
 
-    // Función auxiliar para manejar errores HTTP
-    const handleHttpError = async (response) => {
-        let errorMessage = `Error HTTP: ${response.status}`;
-
-        try {
-            const errorText = await response.text();
-            if (errorText) {
-                errorMessage = errorText;
-            }
-        } catch (e) {
-            // Si no se puede leer el texto del error, usar el mensaje por defecto
-        }
-
-        return errorMessage;
-    };
-
-    // Cargar todos los clientes - El backend decide qué devolver
+    // Cargar todos los clientes
     const loadClients = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch(`${API_BASE_URL}/client/`, {
-                headers: getAuthHeaders()
-            });
+            const response = await apiClient.get('/client/');
 
-            if (response.status === 204) {
-                setClients([]);
-                return;
-            }
-
-            if (!response.ok) {
-                const errorMsg = await handleHttpError(response);
-                throw new Error(errorMsg);
-            }
-
-            const data = await response.json();
-            setClients(data);
+            // Axios maneja automáticamente status 204 y otros
+            setClients(response.data || []);
         } catch (err) {
             setError(err.message || 'Error al cargar clientes');
             setClients([]);
         } finally {
             setLoading(false);
         }
-    }, [getAuthHeaders]);
+    }, []);
 
-    // Crear cliente - Enviar datos directos al backend
+    // Crear cliente
     const createClient = useCallback(async (clientData) => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch(`${API_BASE_URL}/client/`, {
-                method: 'POST',
-                headers: getAuthHeaders(),
-                body: JSON.stringify(clientData),
-            });
+            const response = await apiClient.post('/client/', clientData);
+            const newClient = response.data;
 
-            if (response.status === 409) {
-                const errorText = await handleHttpError(response);
-                throw new Error(errorText);
-            }
-
-            if (!response.ok) {
-                const errorText = await handleHttpError(response);
-                throw new Error(errorText);
-            }
-
-            const newClient = await response.json();
             setClients(prev => [...prev, newClient]);
             return newClient;
         } catch (err) {
-            setError(err.message);
-            throw err; // Re-lanzar para que el componente maneje la UI
+            const errorMsg = err.response?.status === 409
+                ? 'Ya existe un cliente con estos datos'
+                : err.message;
+            setError(errorMsg);
+            throw new Error(errorMsg);
         } finally {
             setLoading(false);
         }
-    }, [getAuthHeaders]);
+    }, []);
 
-    // Actualizar cliente - Backend maneja toda la lógica
+    // Actualizar cliente
     const updateClient = useCallback(async (clientId, clientData) => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch(`${API_BASE_URL}/client/${clientId}`, {
-                method: 'PUT',
-                headers: getAuthHeaders(),
-                body: JSON.stringify(clientData),
-            });
+            const response = await apiClient.put(`/client/${clientId}`, clientData);
+            const updatedClient = response.data;
 
-            if (response.status === 404) {
-                throw new Error('Cliente no encontrado');
-            }
-
-            if (!response.ok) {
-                const errorText = await handleHttpError(response);
-                throw new Error(errorText);
-            }
-
-            const updatedClient = await response.json();
             setClients(prev =>
                 prev.map(client =>
                     client.id === clientId ? updatedClient : client
@@ -132,43 +65,36 @@ export const useClients = () => {
             );
             return updatedClient;
         } catch (err) {
-            setError(err.message);
-            throw err;
+            const errorMsg = err.response?.status === 404
+                ? 'Cliente no encontrado'
+                : err.message;
+            setError(errorMsg);
+            throw new Error(errorMsg);
         } finally {
             setLoading(false);
         }
-    }, [getAuthHeaders]);
+    }, []);
 
     // Eliminar cliente
     const deleteClient = useCallback(async (clientId) => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch(`${API_BASE_URL}/client/${clientId}`, {
-                method: 'DELETE',
-                headers: getAuthHeaders()
-            });
-
-            if (response.status === 404) {
-                throw new Error('Cliente no encontrado');
-            }
-
-            if (!response.ok) {
-                const errorText = await handleHttpError(response);
-                throw new Error(errorText);
-            }
-
+            await apiClient.delete(`/client/${clientId}`);
             setClients(prev => prev.filter(client => client.id !== clientId));
             return true;
         } catch (err) {
-            setError(err.message);
-            throw err;
+            const errorMsg = err.response?.status === 404
+                ? 'Cliente no encontrado'
+                : err.message;
+            setError(errorMsg);
+            throw new Error(errorMsg);
         } finally {
             setLoading(false);
         }
-    }, [getAuthHeaders]);
+    }, []);
 
-    // Cambiar estado del cliente - Backend valida las reglas de negocio
+    // Cambiar estado del cliente
     const updateClientStatus = useCallback(async (clientId, newStatus) => {
         setLoading(true);
         setError(null);
@@ -183,22 +109,9 @@ export const useClients = () => {
                 status: newStatus
             };
 
-            const response = await fetch(`${API_BASE_URL}/client/${clientId}`, {
-                method: 'PUT',
-                headers: getAuthHeaders(),
-                body: JSON.stringify(updatedClientData),
-            });
+            const response = await apiClient.put(`/client/${clientId}`, updatedClientData);
+            const updatedClient = response.data;
 
-            if (response.status === 404) {
-                throw new Error('Cliente no encontrado');
-            }
-
-            if (!response.ok) {
-                const errorText = await handleHttpError(response);
-                throw new Error(errorText);
-            }
-
-            const updatedClient = await response.json();
             setClients(prev =>
                 prev.map(client =>
                     client.id === clientId ? updatedClient : client
@@ -206,12 +119,15 @@ export const useClients = () => {
             );
             return updatedClient;
         } catch (err) {
-            setError(err.message);
-            throw err;
+            const errorMsg = err.response?.status === 404
+                ? 'Cliente no encontrado'
+                : err.message;
+            setError(errorMsg);
+            throw new Error(errorMsg);
         } finally {
             setLoading(false);
         }
-    }, [clients, getAuthHeaders]);
+    }, [clients]);
 
     // Filtrar clientes - Solo filtrado básico en frontend
     const filterClients = useCallback((searchTerm, statusFilter) => {
@@ -234,52 +150,34 @@ export const useClients = () => {
         return filtered;
     }, [clients]);
 
-    // Buscar cliente por RUT - Delegar al backend
+    // Buscar cliente por RUT
     const getClientByRut = useCallback(async (rut) => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch(`${API_BASE_URL}/client/rut/${encodeURIComponent(rut)}`, {
-                headers: getAuthHeaders()
-            });
-
-            if (response.status === 404) {
+            const response = await apiClient.get(`/client/rut/${encodeURIComponent(rut)}`);
+            return response.data;
+        } catch (err) {
+            if (err.response?.status === 404) {
                 return null;
             }
-
-            if (!response.ok) {
-                const errorText = await handleHttpError(response);
-                throw new Error(errorText);
-            }
-
-            const client = await response.json();
-            return client;
-        } catch (err) {
             setError(err.message);
             return null;
         } finally {
             setLoading(false);
         }
-    }, [getAuthHeaders]);
+    }, []);
 
-    // Verificar existencia por RUT - Backend decide
+    // Verificar existencia por RUT
     const existsByRut = useCallback(async (rut) => {
         try {
-            const response = await fetch(`${API_BASE_URL}/client/exists/${encodeURIComponent(rut)}`, {
-                headers: getAuthHeaders()
-            });
-
-            if (!response.ok) {
-                return false;
-            }
-
-            const exists = await response.json();
-            return exists;
+            const response = await apiClient.get(`/client/exists/${encodeURIComponent(rut)}`);
+            return response.data;
         } catch (err) {
             console.error('Error checking RUT existence:', err);
             return false;
         }
-    }, [getAuthHeaders]);
+    }, []);
 
     return {
         // Estado
@@ -287,13 +185,13 @@ export const useClients = () => {
         loading,
         error,
 
-        // Acciones - Todas delegan lógica al backend
+        // Acciones
         loadClients,
         createClient,
         updateClient,
         deleteClient,
         updateClientStatus,
-        filterClients, // Solo filtrado básico frontend
+        filterClients,
         getClientByRut,
         existsByRut,
 

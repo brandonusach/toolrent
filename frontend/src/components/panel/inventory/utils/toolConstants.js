@@ -1,4 +1,4 @@
-// inventory/utils/toolConstants.js
+// inventory/utils/toolConstants.js - Actualizado para Axios
 
 // Estados de herramientas
 export const TOOL_STATUS = {
@@ -101,7 +101,8 @@ export const ERROR_MESSAGES = {
     CATEGORY_REQUIRED: 'Debe seleccionar una categoría',
     INSUFFICIENT_STOCK: 'No hay suficiente stock disponible',
     NETWORK_ERROR: 'Error de conexión. Verifique su conexión a internet.',
-    SERVER_ERROR: 'Error interno del servidor. Intente nuevamente.'
+    SERVER_ERROR: 'Error interno del servidor. Intente nuevamente.',
+    TIMEOUT_ERROR: 'Tiempo de espera agotado. Intente nuevamente.'
 };
 
 // Mensajes de éxito
@@ -115,15 +116,18 @@ export const SUCCESS_MESSAGES = {
     INSTANCE_DELETED: 'Instancia eliminada exitosamente'
 };
 
-// Configuración de la API
+// Configuración de la API - Actualizada para Axios
 export const API_CONFIG = {
     BASE_URL: 'http://localhost:8081/api',
+    TIMEOUT: 10000, // 10 segundos (manejado por Axios)
+    RETRY_ATTEMPTS: 3,
+    RETRY_DELAY: 1000, // 1 segundo
     ENDPOINTS: {
         TOOLS: '/tools',
         CATEGORIES: '/categories',
-        TOOL_INSTANCES: '/tool-instances'
-    },
-    TIMEOUT: 10000
+        TOOL_INSTANCES: '/tool-instances',
+        CLIENTS: '/client'
+    }
 };
 
 // Utilidades para formateo
@@ -241,6 +245,61 @@ export const statusUtils = {
     }
 };
 
+// Utilidades para manejo de errores con Axios
+export const axiosErrorHandlers = {
+    // Determinar tipo de error
+    getErrorType: (error) => {
+        if (error.response) {
+            // Error del servidor
+            return 'server_error';
+        } else if (error.request) {
+            // Error de red
+            return 'network_error';
+        } else if (error.code === 'ECONNABORTED') {
+            // Timeout
+            return 'timeout_error';
+        }
+        return 'unknown_error';
+    },
+
+    // Obtener mensaje de error apropiado
+    getErrorMessage: (error) => {
+        const errorType = axiosErrorHandlers.getErrorType(error);
+
+        switch (errorType) {
+            case 'network_error':
+                return ERROR_MESSAGES.NETWORK_ERROR;
+            case 'timeout_error':
+                return ERROR_MESSAGES.TIMEOUT_ERROR;
+            case 'server_error':
+                return error.response?.data || ERROR_MESSAGES.SERVER_ERROR;
+            default:
+                return error.message || 'Error desconocido';
+        }
+    },
+
+    // Verificar si el error es recuperable
+    isRetryable: (error) => {
+        const errorType = axiosErrorHandlers.getErrorType(error);
+        const status = error.response?.status;
+
+        // Errores recuperables: problemas de red, timeouts, errores 5xx
+        return errorType === 'network_error' ||
+            errorType === 'timeout_error' ||
+            (status >= 500 && status < 600);
+    },
+
+    // Determinar si es un error de validación
+    isValidationError: (error) => {
+        return error.response?.status === 400 || error.response?.status === 422;
+    },
+
+    // Determinar si es un error de autorización
+    isAuthError: (error) => {
+        return error.response?.status === 401 || error.response?.status === 403;
+    }
+};
+
 export default {
     TOOL_STATUS,
     TOOL_STATUS_LABELS,
@@ -257,5 +316,6 @@ export default {
     API_CONFIG,
     formatters,
     validators,
-    statusUtils
+    statusUtils,
+    axiosErrorHandlers
 };

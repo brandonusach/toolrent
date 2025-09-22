@@ -1,25 +1,19 @@
-// inventory/hooks/useTools.js - PURE VERSION
+// hooks/useTools.js - Version con Axios
 import { useState, useCallback } from 'react';
+import apiClient from '../../../../api/axiosConfig';
 
 export const useTools = () => {
     const [tools, setTools] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    const API_BASE = 'http://localhost:8081/api';
-
-    // Load all tools (no client-side processing)
+    // Load all tools
     const loadTools = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch(`${API_BASE}/tools`);
-            if (response.ok) {
-                const data = await response.json();
-                setTools(data); // Use data exactly as returned from backend
-            } else {
-                throw new Error(`Error ${response.status}: ${response.statusText}`);
-            }
+            const response = await apiClient.get('/tools');
+            setTools(response.data || []);
         } catch (err) {
             console.error('Error loading tools:', err);
             setError(err.message);
@@ -29,147 +23,105 @@ export const useTools = () => {
         }
     }, []);
 
-    // Create new tool (minimal frontend processing)
+    // Create new tool
     const createTool = useCallback(async (toolData) => {
         try {
-            const response = await fetch(`${API_BASE}/tools`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(toolData),
-            });
+            const response = await apiClient.post('/tools', toolData);
+            const newTool = response.data;
 
-            if (response.ok) {
-                const newTool = await response.json();
-                setTools(prevTools => [...prevTools, newTool]);
-                return newTool;
-            } else {
-                const errorText = await response.text();
-                const error = new Error(errorText || 'Error al crear la herramienta');
-                // Attach response for detailed error handling
-                error.response = { data: errorText };
-                throw error;
-            }
+            setTools(prevTools => [...prevTools, newTool]);
+            return newTool;
         } catch (err) {
             console.error('Error creating tool:', err);
-            throw err;
+            // Mantener la estructura del error para compatibilidad
+            const error = new Error(err.message || 'Error al crear la herramienta');
+            error.response = { data: err.response?.data || err.message };
+            throw error;
         }
     }, []);
 
-    // Update tool (minimal frontend processing)
+    // Update tool
     const updateTool = useCallback(async (toolId, toolData) => {
         try {
-            const response = await fetch(`${API_BASE}/tools/${toolId}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(toolData),
-            });
+            const response = await apiClient.put(`/tools/${toolId}`, toolData);
+            const updatedTool = response.data;
 
-            if (response.ok) {
-                const updatedTool = await response.json();
-                setTools(prevTools =>
-                    prevTools.map(tool =>
-                        tool.id === toolId ? updatedTool : tool
-                    )
-                );
-                return updatedTool;
-            } else {
-                const errorText = await response.text();
-                const error = new Error(errorText || 'Error al actualizar la herramienta');
-                error.response = { data: errorText };
-                throw error;
-            }
+            setTools(prevTools =>
+                prevTools.map(tool =>
+                    tool.id === toolId ? updatedTool : tool
+                )
+            );
+            return updatedTool;
         } catch (err) {
             console.error('Error updating tool:', err);
-            throw err;
+            const error = new Error(err.message || 'Error al actualizar la herramienta');
+            error.response = { data: err.response?.data || err.message };
+            throw error;
         }
     }, []);
 
-    // Delete tool (backend handles all business logic)
+    // Delete tool
     const deleteTool = useCallback(async (toolId) => {
         try {
-            const response = await fetch(`${API_BASE}/tools/${toolId}`, {
-                method: 'DELETE'
-            });
-
-            if (response.ok) {
-                setTools(prevTools => prevTools.filter(tool => tool.id !== toolId));
-                return true;
-            } else {
-                const errorText = await response.text();
-                throw new Error(errorText || 'Error al eliminar la herramienta');
-            }
+            await apiClient.delete(`/tools/${toolId}`);
+            setTools(prevTools => prevTools.filter(tool => tool.id !== toolId));
+            return true;
         } catch (err) {
             console.error('Error deleting tool:', err);
-            throw err;
+            throw new Error(err.message || 'Error al eliminar la herramienta');
         }
     }, []);
 
-    // Add stock (backend handles all validation and business logic)
+    // Add stock
     const updateStock = useCallback(async (toolId, quantity) => {
         try {
-            const response = await fetch(
-                `${API_BASE}/tools/${toolId}/add-stock?quantity=${quantity}`,
-                { method: 'POST' }
-            );
+            const response = await apiClient.post(`/tools/${toolId}/add-stock`, null, {
+                params: { quantity }
+            });
+            const updatedTool = response.data;
 
-            if (response.ok) {
-                const updatedTool = await response.json();
-                setTools(prevTools =>
-                    prevTools.map(tool =>
-                        tool.id === toolId ? updatedTool : tool
-                    )
-                );
-                return updatedTool;
-            } else {
-                const errorText = await response.text();
-                const error = new Error(errorText || 'Error al agregar stock');
-                error.response = { data: errorText };
-                throw error;
-            }
+            setTools(prevTools =>
+                prevTools.map(tool =>
+                    tool.id === toolId ? updatedTool : tool
+                )
+            );
+            return updatedTool;
         } catch (err) {
             console.error('Error adding stock:', err);
-            throw err;
+            const error = new Error(err.message || 'Error al agregar stock');
+            error.response = { data: err.response?.data || err.message };
+            throw error;
         }
     }, []);
 
-    // Decommission tool (backend handles all validation and business logic)
+    // Decommission tool
     const decommissionTool = useCallback(async (toolId, quantity) => {
         try {
-            const response = await fetch(
-                `${API_BASE}/tools/${toolId}/decommission?quantity=${quantity}`,
-                { method: 'PUT' }
-            );
+            const response = await apiClient.put(`/tools/${toolId}/decommission`, null, {
+                params: { quantity }
+            });
+            const updatedTool = response.data;
 
-            if (response.ok) {
-                const updatedTool = await response.json();
-                setTools(prevTools =>
-                    prevTools.map(tool =>
-                        tool.id === toolId ? updatedTool : tool
-                    )
-                );
-                return updatedTool;
-            } else {
-                const errorText = await response.text();
-                const error = new Error(errorText || 'Error al dar de baja');
-                error.response = { data: errorText };
-                throw error;
-            }
+            setTools(prevTools =>
+                prevTools.map(tool =>
+                    tool.id === toolId ? updatedTool : tool
+                )
+            );
+            return updatedTool;
         } catch (err) {
             console.error('Error decommissioning tool:', err);
-            throw err;
+            const error = new Error(err.message || 'Error al dar de baja');
+            error.response = { data: err.response?.data || err.message };
+            throw error;
         }
     }, []);
 
-    // Get tool by ID (simple lookup)
+    // Get tool by ID
     const getToolById = useCallback((toolId) => {
         return tools.find(tool => tool.id === parseInt(toolId));
     }, [tools]);
 
-    // Simple client-side filtering (only UI logic, no business rules)
+    // Filter tools
     const filterTools = useCallback((searchTerm, categoryFilter) => {
         return tools.filter(tool => {
             const matchesSearch = !searchTerm ||
@@ -181,25 +133,23 @@ export const useTools = () => {
         });
     }, [tools]);
 
-    // Remove client-side statistics calculation - let backend provide stats if needed
-
     return {
         // State
         tools,
         loading,
         error,
 
-        // CRUD operations (pure API calls)
+        // CRUD operations
         loadTools,
         createTool,
         updateTool,
         deleteTool,
 
-        // Stock operations (pure API calls)
+        // Stock operations
         updateStock,
         decommissionTool,
 
-        // Utilities (simple frontend operations)
+        // Utilities
         getToolById,
         filterTools
     };

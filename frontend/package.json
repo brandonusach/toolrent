@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@react-keycloak/web": "^3.4.0",
+    "axios": "^1.12.2",
     "keycloak-js": "^26.2.0",
     "lucide-react": "^0.542.0",
     "react": "^19.1.1",
