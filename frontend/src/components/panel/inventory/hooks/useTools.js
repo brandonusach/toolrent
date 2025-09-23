@@ -1,6 +1,6 @@
 // hooks/useTools.js - Version con Axios
 import { useState, useCallback } from 'react';
-import apiClient from '../../../../api/axiosConfig';
+
 
 export const useTools = () => {
     const [tools, setTools] = useState([]);

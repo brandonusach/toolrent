@@ -1,6 +1,6 @@
 // hooks/useCategories.js - Version con Axios
 import { useState, useCallback } from 'react';
-import apiClient from '../../../../api/axiosConfig';
+
 
 export const useCategories = () => {
     const [categories, setCategories] = useState([]);

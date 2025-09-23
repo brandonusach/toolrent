@@ -1,6 +1,5 @@
 // hooks/useClients.js - Version con Axios
 import { useState, useCallback } from 'react';
-import apiClient from '../../../../api/axiosConfig';
 
 export const useClients = () => {
     const [clients, setClients] = useState([]);
