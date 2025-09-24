@@ -1,248 +1,278 @@
-/**
- * Constantes para la gestión de clientes
- * Centraliza todos los valores constantes utilizados en el módulo de clientes
- */
+// constants/clientConstants.js - Simplificado siguiendo el patrón de toolConstants
 
-// Estados de cliente
+// Estados de clientes
 export const CLIENT_STATUS = {
     ACTIVE: 'ACTIVE',
     RESTRICTED: 'RESTRICTED'
 };
 
-// Configuración de estados con metadatos
-export const CLIENT_STATUS_CONFIG = {
-    [CLIENT_STATUS.ACTIVE]: {
-        label: 'Activo',
-        description: 'Cliente habilitado para realizar transacciones',
-        color: 'green',
-        textColor: 'text-green-400',
-        bgColor: 'bg-green-500/20',
-        borderColor: 'border-green-500/30',
-        icon: 'UserCheck'
-    },
-    [CLIENT_STATUS.RESTRICTED]: {
-        label: 'Restringido',
-        description: 'Cliente con restricciones por atrasos en pagos o políticas internas',
-        color: 'red',
-        textColor: 'text-red-400',
-        bgColor: 'bg-red-500/20',
-        borderColor: 'border-red-500/30',
-        icon: 'UserX'
-    }
+// Etiquetas de estado para mostrar al usuario
+export const CLIENT_STATUS_LABELS = {
+    [CLIENT_STATUS.ACTIVE]: 'Activo',
+    [CLIENT_STATUS.RESTRICTED]: 'Restringido'
 };
 
-// Opciones para selects y filtros
-export const CLIENT_STATUS_OPTIONS = [
-    { value: CLIENT_STATUS.ACTIVE, label: CLIENT_STATUS_CONFIG[CLIENT_STATUS.ACTIVE].label },
-    { value: CLIENT_STATUS.RESTRICTED, label: CLIENT_STATUS_CONFIG[CLIENT_STATUS.RESTRICTED].label }
-];
-
-// Opciones de filtro incluyendo "Todos"
-export const CLIENT_FILTER_OPTIONS = [
-    { value: 'ALL', label: 'Todos los estados' },
-    ...CLIENT_STATUS_OPTIONS
-];
-
-// Campos de cliente para formularios
-export const CLIENT_FIELDS = {
-    NAME: 'name',
-    RUT: 'rut',
-    PHONE: 'phone',
-    EMAIL: 'email',
-    STATUS: 'status'
+// Colores para los badges de estado
+export const CLIENT_STATUS_COLORS = {
+    [CLIENT_STATUS.ACTIVE]: 'bg-green-900 text-green-300',
+    [CLIENT_STATUS.RESTRICTED]: 'bg-red-900 text-red-300'
 };
 
-// Configuración de campos para formularios
-export const CLIENT_FIELD_CONFIG = {
-    [CLIENT_FIELDS.NAME]: {
-        label: 'Nombre Completo',
-        placeholder: 'Ingrese el nombre completo',
-        type: 'text',
-        required: true,
-        maxLength: 100,
-        minLength: 2
-    },
-    [CLIENT_FIELDS.RUT]: {
-        label: 'RUT',
-        placeholder: '12.345.678-9',
-        type: 'text',
-        required: true,
-        maxLength: 12,
-        pattern: '[0-9.-K]+'
-    },
-    [CLIENT_FIELDS.PHONE]: {
-        label: 'Teléfono',
-        placeholder: '9 1234 5678 o 22 1234 5678',
-        type: 'tel',
-        required: true,
-        maxLength: 15
-    },
-    [CLIENT_FIELDS.EMAIL]: {
-        label: 'Email',
-        placeholder: 'cliente@email.com',
-        type: 'email',
-        required: true,
-        maxLength: 255
-    },
-    [CLIENT_FIELDS.STATUS]: {
-        label: 'Estado',
-        type: 'select',
-        required: true,
-        options: CLIENT_STATUS_OPTIONS
-    }
+// Tipos de filtro para clientes
+export const FILTER_TYPES = {
+    ALL: 'ALL',
+    ACTIVE: 'ACTIVE',
+    RESTRICTED: 'RESTRICTED'
 };
 
-// Mensajes de validación
-export const VALIDATION_MESSAGES = {
-    REQUIRED: 'Este campo es requerido',
+// Etiquetas para filtros
+export const FILTER_LABELS = {
+    [FILTER_TYPES.ALL]: 'Todos',
+    [FILTER_TYPES.ACTIVE]: 'Activos',
+    [FILTER_TYPES.RESTRICTED]: 'Restringidos'
+};
+
+// Reglas de validación
+export const VALIDATION_RULES = {
+    CLIENT_NAME: {
+        MIN_LENGTH: 2,
+        MAX_LENGTH: 100,
+        REQUIRED: true
+    },
     RUT: {
-        INVALID: 'RUT chileno no válido',
-        REQUIRED: 'RUT es requerido',
-        FORMAT: 'Formato de RUT incorrecto (ej: 12.345.678-9)',
-        DUPLICATE: 'Ya existe un cliente con este RUT'
-    },
-    PHONE: {
-        INVALID: 'Número de teléfono chileno no válido',
-        REQUIRED: 'Teléfono es requerido',
-        FORMAT: 'Use formato: 9 XXXX XXXX (celular) o XX XXXX XXXX (fijo)',
-        DUPLICATE: 'Ya existe un cliente con este teléfono'
-    },
-    EMAIL: {
-        INVALID: 'Formato de email no válido',
-        REQUIRED: 'Email es requerido',
-        DUPLICATE: 'Ya existe un cliente con este email'
-    },
-    NAME: {
-        REQUIRED: 'Nombre es requerido',
-        MIN_LENGTH: 'Nombre debe tener al menos 2 caracteres',
-        MAX_LENGTH: 'Nombre no puede exceder 100 caracteres',
-        FORMAT: 'Nombre solo puede contener letras, espacios y algunos caracteres especiales'
-    }
-};
-
-// Configuración de búsqueda
-export const SEARCH_CONFIG = {
-    DEBOUNCE_DELAY: 300, // ms
-    MIN_SEARCH_LENGTH: 2,
-    MAX_RESULTS: 100,
-    FIELDS: [
-        CLIENT_FIELDS.NAME,
-        CLIENT_FIELDS.RUT,
-        CLIENT_FIELDS.PHONE,
-        CLIENT_FIELDS.EMAIL
-    ]
-};
-
-// Configuración de paginación
-export const PAGINATION_CONFIG = {
-    DEFAULT_PAGE_SIZE: 20,
-    PAGE_SIZE_OPTIONS: [10, 20, 50, 100],
-    MAX_PAGE_SIZE: 100
-};
-
-// Motivos comunes de restricción de clientes
-export const RESTRICTION_REASONS = [
-    'Atrasos en pagos superiores a 30 días',
-    'Múltiples préstamos vencidos',
-    'Incumplimiento reiterado de términos',
-    'Solicitud del cliente',
-    'Revisión de crédito pendiente',
-    'Documentación incompleta',
-    'Comportamiento inadecuado',
-    'Otro'
-];
-
-// Configuración de formatos
-export const FORMAT_CONFIG = {
-    RUT: {
-        PATTERN: /^[0-9]+[-]?[0-9kK]{1}$/,
-        DISPLAY_PATTERN: /^[0-9]{1,3}(\.[0-9]{3})*[-][0-9kK]{1}$/,
+        REQUIRED: true,
         MAX_LENGTH: 12
     },
     PHONE: {
-        CELLULAR_PATTERN: /^(\+56)?[9][0-9]{8}$/,
-        LANDLINE_PATTERN: /^(\+56)?(2|3[2-5]|4[1-5]|5[1-358]|6[1-34567]|7[1-5])[0-9]{6,7}$/,
-        DISPLAY_FORMAT: '+56 X XXXX XXXX'
+        REQUIRED: true,
+        MAX_LENGTH: 15
     },
     EMAIL: {
-        PATTERN: /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/,
+        REQUIRED: true,
         MAX_LENGTH: 255
     }
 };
 
-// Configuración de la API
-export const API_CONFIG = {
-    ENDPOINTS: {
-        GET_ALL: '/client/',
-        GET_BY_ID: '/client/{id}',
-        GET_BY_RUT: '/client/rut/{rut}',
-        GET_BY_NAME: '/client/name/{name}',
-        GET_BY_STATUS: '/client/status/{status}',
-        EXISTS_BY_RUT: '/client/exists/{rut}',
-        CREATE: '/client/',
-        UPDATE: '/client/{id}',
-        DELETE: '/client/{id}'
-    },
-    HTTP_STATUS: {
-        OK: 200,
-        CREATED: 201,
-        NO_CONTENT: 204,
-        NOT_FOUND: 404,
-        CONFLICT: 409,
-        INTERNAL_SERVER_ERROR: 500
-    },
-    TIMEOUT: 10000 // 10 segundos
+// Mensajes de error estándar
+export const ERROR_MESSAGES = {
+    REQUIRED_FIELD: 'Este campo es requerido',
+    INVALID_NAME: `El nombre debe tener entre ${VALIDATION_RULES.CLIENT_NAME.MIN_LENGTH} y ${VALIDATION_RULES.CLIENT_NAME.MAX_LENGTH} caracteres`,
+    INVALID_RUT: 'RUT chileno no válido',
+    INVALID_PHONE: 'Número de teléfono chileno no válido',
+    INVALID_EMAIL: 'Formato de email no válido',
+    DUPLICATE_RUT: 'Ya existe un cliente con este RUT',
+    DUPLICATE_EMAIL: 'Ya existe un cliente con este email',
+    CLIENT_NOT_FOUND: 'Cliente no encontrado',
+    NETWORK_ERROR: 'Error de conexión. Verifique su conexión a internet.',
+    SERVER_ERROR: 'Error interno del servidor. Intente nuevamente.',
+    TIMEOUT_ERROR: 'Tiempo de espera agotado. Intente nuevamente.'
 };
 
-// Configuración de la interfaz
-export const UI_CONFIG = {
-    COLORS: {
-        PRIMARY: 'blue',
-        SUCCESS: 'green',
-        DANGER: 'red',
-        WARNING: 'yellow',
-        INFO: 'blue',
-        DARK: 'gray'
-    },
-    ANIMATIONS: {
-        FADE_IN: 'fadeIn 0.3s ease-in-out',
-        SLIDE_IN: 'slideIn 0.2s ease-out',
-        BOUNCE: 'bounce 0.5s ease-in-out'
-    },
-    BREAKPOINTS: {
-        SM: '640px',
-        MD: '768px',
-        LG: '1024px',
-        XL: '1280px'
+// Mensajes de éxito
+export const SUCCESS_MESSAGES = {
+    CLIENT_CREATED: 'Cliente registrado exitosamente',
+    CLIENT_UPDATED: 'Cliente actualizado exitosamente',
+    CLIENT_DELETED: 'Cliente eliminado exitosamente',
+    STATUS_UPDATED: 'Estado del cliente actualizado exitosamente'
+};
+
+// Configuración de la API
+export const API_CONFIG = {
+    BASE_URL: 'http://localhost:8081/api',
+    TIMEOUT: 10000, // 10 segundos
+    RETRY_ATTEMPTS: 3,
+    RETRY_DELAY: 1000, // 1 segundo
+    ENDPOINTS: {
+        CLIENTS: '/clients',
+        CLIENT_BY_RUT: '/clients/rut',
+        CLIENT_EXISTS: '/clients/exists'
     }
 };
 
-// Mensajes del sistema
-export const SYSTEM_MESSAGES = {
-    SUCCESS: {
-        CLIENT_CREATED: 'Cliente creado exitosamente',
-        CLIENT_UPDATED: 'Cliente actualizado exitosamente',
-        CLIENT_DELETED: 'Cliente eliminado exitosamente',
-        STATUS_CHANGED: 'Estado del cliente cambiado exitosamente'
+// Utilidades para formateo
+export const formatters = {
+    // Formatear RUT
+    formatRut: (rut) => {
+        if (!rut) return '';
+        const cleanRut = rut.replace(/\D/g, '');
+        if (cleanRut.length < 8) return rut;
+
+        const rutBody = cleanRut.slice(0, -1);
+        const checkDigit = cleanRut.slice(-1);
+
+        return `${rutBody.replace(/\B(?=(\d{3})+(?!\d))/g, '.')}-${checkDigit}`;
     },
-    ERROR: {
-        NETWORK_ERROR: 'Error de conexión. Verifique su conexión a internet',
-        SERVER_ERROR: 'Error interno del servidor. Intente nuevamente',
-        CLIENT_NOT_FOUND: 'Cliente no encontrado',
-        CLIENT_EXISTS: 'Ya existe un cliente con estos datos',
-        INVALID_DATA: 'Los datos ingresados no son válidos',
-        PERMISSION_DENIED: 'No tiene permisos para realizar esta acción',
-        UNKNOWN_ERROR: 'Ha ocurrido un error inesperado'
+
+    // Formatear teléfono
+    formatPhone: (phone) => {
+        if (!phone) return '';
+        const cleanPhone = phone.replace(/\D/g, '');
+
+        if (cleanPhone.length === 9 && cleanPhone[0] === '9') {
+            // Celular: 9 1234 5678
+            return `${cleanPhone[0]} ${cleanPhone.slice(1, 5)} ${cleanPhone.slice(5)}`;
+        } else if (cleanPhone.length === 8) {
+            // Fijo: 22 123 456
+            return `${cleanPhone.slice(0, 2)} ${cleanPhone.slice(2, 5)} ${cleanPhone.slice(5)}`;
+        }
+        return phone;
     },
-    CONFIRMATION: {
-        DELETE_CLIENT: '¿Está seguro de que quiere eliminar este cliente?',
-        CHANGE_STATUS: '¿Está seguro de que quiere cambiar el estado de este cliente?',
-        DISCARD_CHANGES: '¿Está seguro de que quiere descartar los cambios?'
+
+    // Formatear fecha
+    formatDate: (date) => {
+        if (!date) return 'N/A';
+        return new Intl.DateTimeFormat('es-CL', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit'
+        }).format(new Date(date));
+    }
+};
+
+// Validadores
+export const validators = {
+    // Validar nombre de cliente
+    validateName: (name) => {
+        if (!name || name.trim().length === 0) {
+            return ERROR_MESSAGES.REQUIRED_FIELD;
+        }
+        if (name.trim().length < VALIDATION_RULES.CLIENT_NAME.MIN_LENGTH ||
+            name.trim().length > VALIDATION_RULES.CLIENT_NAME.MAX_LENGTH) {
+            return ERROR_MESSAGES.INVALID_NAME;
+        }
+        return null;
     },
-    INFO: {
-        NO_CLIENTS_FOUND: 'No se encontraron clientes que coincidan con los criterios de búsqueda',
-        LOADING_CLIENTS: 'Cargando clientes...',
-        EMPTY_STATE: 'No hay clientes registrados en el sistema'
+
+    // Validar RUT
+    validateRut: (rut) => {
+        if (!rut || rut.trim().length === 0) {
+            return ERROR_MESSAGES.REQUIRED_FIELD;
+        }
+
+        const cleanRut = rut.replace(/[.-]/g, '');
+        if (!/^[0-9]+[0-9kK]$/.test(cleanRut)) {
+            return ERROR_MESSAGES.INVALID_RUT;
+        }
+
+        // Validación del dígito verificador
+        const rutBody = cleanRut.slice(0, -1);
+        const checkDigit = cleanRut.slice(-1).toUpperCase();
+
+        let sum = 0;
+        let multiplier = 2;
+
+        for (let i = rutBody.length - 1; i >= 0; i--) {
+            sum += parseInt(rutBody[i]) * multiplier;
+            multiplier = multiplier === 7 ? 2 : multiplier + 1;
+        }
+
+        const remainder = sum % 11;
+        const calculatedCheckDigit = remainder === 0 ? '0' : remainder === 1 ? 'K' : (11 - remainder).toString();
+
+        if (checkDigit !== calculatedCheckDigit) {
+            return ERROR_MESSAGES.INVALID_RUT;
+        }
+
+        return null;
+    },
+
+    // Validar teléfono
+    validatePhone: (phone) => {
+        if (!phone || phone.trim().length === 0) {
+            return ERROR_MESSAGES.REQUIRED_FIELD;
+        }
+
+        const cleanPhone = phone.replace(/\D/g, '');
+
+        // Celular: 9 seguido de 8 dígitos
+        if (cleanPhone.length === 9 && cleanPhone[0] === '9') {
+            return null;
+        }
+
+        // Fijo: 8 dígitos (área + número)
+        if (cleanPhone.length === 8) {
+            return null;
+        }
+
+        return ERROR_MESSAGES.INVALID_PHONE;
+    },
+
+    // Validar email
+    validateEmail: (email) => {
+        if (!email || email.trim().length === 0) {
+            return ERROR_MESSAGES.REQUIRED_FIELD;
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+            return ERROR_MESSAGES.INVALID_EMAIL;
+        }
+
+        return null;
+    }
+};
+
+// Utilidades de estado
+export const statusUtils = {
+    // Obtener clase CSS para el estado
+    getStatusClass: (status) => {
+        return CLIENT_STATUS_COLORS[status] || 'bg-gray-900 text-gray-300';
+    },
+
+    // Obtener etiqueta del estado
+    getStatusLabel: (status) => {
+        return CLIENT_STATUS_LABELS[status] || status;
+    },
+
+    // Verificar si el cliente está activo
+    isActive: (status) => {
+        return status === CLIENT_STATUS.ACTIVE;
+    },
+
+    // Verificar si el cliente está restringido
+    isRestricted: (status) => {
+        return status === CLIENT_STATUS.RESTRICTED;
+    }
+};
+
+// Utilidades para manejo de errores con Axios
+export const axiosErrorHandlers = {
+    // Determinar tipo de error
+    getErrorType: (error) => {
+        if (error.response) {
+            return 'server_error';
+        } else if (error.request) {
+            return 'network_error';
+        } else if (error.code === 'ECONNABORTED') {
+            return 'timeout_error';
+        }
+        return 'unknown_error';
+    },
+
+    // Obtener mensaje de error apropiado
+    getErrorMessage: (error) => {
+        const errorType = axiosErrorHandlers.getErrorType(error);
+
+        switch (errorType) {
+            case 'network_error':
+                return ERROR_MESSAGES.NETWORK_ERROR;
+            case 'timeout_error':
+                return ERROR_MESSAGES.TIMEOUT_ERROR;
+            case 'server_error':
+                return error.response?.data || ERROR_MESSAGES.SERVER_ERROR;
+            default:
+                return error.message || 'Error desconocido';
+        }
+    },
+
+    // Verificar si el error es recuperable
+    isRetryable: (error) => {
+        const errorType = axiosErrorHandlers.getErrorType(error);
+        const status = error.response?.status;
+
+        return errorType === 'network_error' ||
+            errorType === 'timeout_error' ||
+            (status >= 500 && status < 600);
     }
 };
 
@@ -281,86 +311,27 @@ export const ROLE_PERMISSIONS = {
     ]
 };
 
-// Configuración de exportación
-export const EXPORT_CONFIG = {
-    FORMATS: ['csv', 'excel', 'pdf'],
-    CSV: {
-        DELIMITER: ',',
-        ENCODING: 'utf-8',
-        HEADERS: [
-            'ID',
-            'Nombre',
-            'RUT',
-            'Teléfono',
-            'Email',
-            'Estado',
-            'Fecha Registro'
-        ]
-    },
-    MAX_RECORDS: 10000
-};
-
-// Configuración de filtros avanzados
-export const ADVANCED_FILTERS = {
-    DATE_RANGES: [
-        { value: 'today', label: 'Hoy' },
-        { value: 'week', label: 'Esta semana' },
-        { value: 'month', label: 'Este mes' },
-        { value: 'quarter', label: 'Este trimestre' },
-        { value: 'year', label: 'Este año' },
-        { value: 'custom', label: 'Personalizado' }
-    ],
-    SORT_OPTIONS: [
-        { value: 'name_asc', label: 'Nombre (A-Z)' },
-        { value: 'name_desc', label: 'Nombre (Z-A)' },
-        { value: 'rut_asc', label: 'RUT (Menor a Mayor)' },
-        { value: 'rut_desc', label: 'RUT (Mayor a Menor)' },
-        { value: 'date_asc', label: 'Fecha registro (Más antiguo)' },
-        { value: 'date_desc', label: 'Fecha registro (Más reciente)' },
-        { value: 'status', label: 'Estado' }
-    ]
-};
-
-// Utilitarios para trabajar con las constantes
-export const getStatusConfig = (status) => {
-    return CLIENT_STATUS_CONFIG[status] || CLIENT_STATUS_CONFIG[CLIENT_STATUS.RESTRICTED];
-};
-
-export const isValidStatus = (status) => {
-    return Object.values(CLIENT_STATUS).includes(status);
-};
-
-export const getFieldConfig = (field) => {
-    return CLIENT_FIELD_CONFIG[field] || null;
-};
-
+// Utility function for permission checking
 export const hasPermission = (userRole, permission) => {
     const rolePermissions = ROLE_PERMISSIONS[userRole] || [];
     return rolePermissions.includes(permission);
 };
 
-// Exportar todo como default también
 export default {
     CLIENT_STATUS,
-    CLIENT_STATUS_CONFIG,
-    CLIENT_STATUS_OPTIONS,
-    CLIENT_FILTER_OPTIONS,
-    CLIENT_FIELDS,
-    CLIENT_FIELD_CONFIG,
-    VALIDATION_MESSAGES,
-    SEARCH_CONFIG,
-    PAGINATION_CONFIG,
-    RESTRICTION_REASONS,
-    FORMAT_CONFIG,
+    CLIENT_STATUS_LABELS,
+    CLIENT_STATUS_COLORS,
+    FILTER_TYPES,
+    FILTER_LABELS,
+    VALIDATION_RULES,
+    ERROR_MESSAGES,
+    SUCCESS_MESSAGES,
     API_CONFIG,
-    UI_CONFIG,
-    SYSTEM_MESSAGES,
+    formatters,
+    validators,
+    statusUtils,
+    axiosErrorHandlers,
     PERMISSIONS,
     ROLE_PERMISSIONS,
-    EXPORT_CONFIG,
-    ADVANCED_FILTERS,
-    getStatusConfig,
-    isValidStatus,
-    getFieldConfig,
     hasPermission
 };

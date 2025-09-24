@@ -1,176 +1,119 @@
-// hooks/useClients.js - Version con Axios
+// hooks/useClients.js - Siguiendo exactamente el patrón del profesor
 import { useState, useCallback } from 'react';
+import httpClient from "../../../../http-common";
 
 export const useClients = () => {
     const [clients, setClients] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // Función para limpiar errores
-    const clearError = useCallback(() => {
-        setError(null);
-    }, []);
-
-    // Cargar todos los clientes
+    // Load all clients
     const loadClients = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await apiClient.get('/client/');
-
-            // Axios maneja automáticamente status 204 y otros
+            const response = await httpClient.get('/api/v1/clients/');
             setClients(response.data || []);
         } catch (err) {
-            setError(err.message || 'Error al cargar clientes');
+            console.error('Error loading clients:', err);
+            setError(err.message);
             setClients([]);
         } finally {
             setLoading(false);
         }
     }, []);
 
-    // Crear cliente
+    // Create new client - igual que profesor con create()
     const createClient = useCallback(async (clientData) => {
-        setLoading(true);
-        setError(null);
         try {
-            const response = await apiClient.post('/client/', clientData);
+            const response = await httpClient.post('/api/v1/clients/', clientData);
             const newClient = response.data;
 
-            setClients(prev => [...prev, newClient]);
+            setClients(prevClients => [...prevClients, newClient]);
             return newClient;
         } catch (err) {
-            const errorMsg = err.response?.status === 409
-                ? 'Ya existe un cliente con estos datos'
-                : err.message;
-            setError(errorMsg);
-            throw new Error(errorMsg);
-        } finally {
-            setLoading(false);
+            console.error('Error creating client:', err);
+            throw new Error(err.message || 'Error al crear el cliente');
         }
     }, []);
 
-    // Actualizar cliente
+    // Update client - igual que profesor con update() - envía objeto completo
     const updateClient = useCallback(async (clientId, clientData) => {
-        setLoading(true);
-        setError(null);
         try {
-            const response = await apiClient.put(`/client/${clientId}`, clientData);
+            // Patrón del profesor: PUT sin ID en URL, objeto completo con ID
+            const clientWithId = { ...clientData, id: clientId };
+            const response = await httpClient.put('/api/v1/clients/', clientWithId);
             const updatedClient = response.data;
 
-            setClients(prev =>
-                prev.map(client =>
+            setClients(prevClients =>
+                prevClients.map(client =>
                     client.id === clientId ? updatedClient : client
                 )
             );
             return updatedClient;
         } catch (err) {
-            const errorMsg = err.response?.status === 404
-                ? 'Cliente no encontrado'
-                : err.message;
-            setError(errorMsg);
-            throw new Error(errorMsg);
-        } finally {
-            setLoading(false);
+            console.error('Error updating client:', err);
+            throw new Error(err.message || 'Error al actualizar el cliente');
         }
     }, []);
 
-    // Eliminar cliente
+    // Delete client - igual que profesor con remove()
     const deleteClient = useCallback(async (clientId) => {
-        setLoading(true);
-        setError(null);
         try {
-            await apiClient.delete(`/client/${clientId}`);
-            setClients(prev => prev.filter(client => client.id !== clientId));
+            await httpClient.delete(`/api/v1/clients/${clientId}`);
+            setClients(prevClients => prevClients.filter(client => client.id !== clientId));
             return true;
         } catch (err) {
-            const errorMsg = err.response?.status === 404
-                ? 'Cliente no encontrado'
-                : err.message;
-            setError(errorMsg);
-            throw new Error(errorMsg);
-        } finally {
-            setLoading(false);
+            console.error('Error deleting client:', err);
+            throw new Error(err.message || 'Error al eliminar el cliente');
         }
     }, []);
 
-    // Cambiar estado del cliente
-    const updateClientStatus = useCallback(async (clientId, newStatus) => {
-        setLoading(true);
-        setError(null);
+    // Change client status - específico de tu negocio
+    const updateClientStatus = useCallback(async (clientId, status) => {
         try {
-            const currentClient = clients.find(c => c.id === clientId);
-            if (!currentClient) {
-                throw new Error('Cliente no encontrado en caché local');
-            }
-
-            const updatedClientData = {
-                ...currentClient,
-                status: newStatus
-            };
-
-            const response = await apiClient.put(`/client/${clientId}`, updatedClientData);
+            const response = await httpClient.put(`/api/v1/clients/${clientId}/status`, null, {
+                params: { status }
+            });
             const updatedClient = response.data;
 
-            setClients(prev =>
-                prev.map(client =>
+            setClients(prevClients =>
+                prevClients.map(client =>
                     client.id === clientId ? updatedClient : client
                 )
             );
             return updatedClient;
         } catch (err) {
-            const errorMsg = err.response?.status === 404
-                ? 'Cliente no encontrado'
-                : err.message;
-            setError(errorMsg);
-            throw new Error(errorMsg);
-        } finally {
-            setLoading(false);
+            console.error('Error updating client status:', err);
+            const error = new Error(err.message || 'Error al cambiar estado del cliente');
+            error.response = { data: err.response?.data || err.message };
+            throw error;
         }
+    }, []);
+
+    // Get client by ID
+    const getClientById = useCallback((clientId) => {
+        return clients.find(client => client.id === parseInt(clientId));
     }, [clients]);
 
-    // Filtrar clientes - Solo filtrado básico en frontend
-    const filterClients = useCallback((searchTerm, statusFilter) => {
-        let filtered = [...clients];
-
-        if (searchTerm && searchTerm.trim() !== '') {
-            const term = searchTerm.toLowerCase().trim();
-            filtered = filtered.filter(client =>
-                (client.name && client.name.toLowerCase().includes(term)) ||
-                (client.rut && client.rut.toLowerCase().includes(term)) ||
-                (client.email && client.email.toLowerCase().includes(term)) ||
-                (client.phone && client.phone.toLowerCase().includes(term))
-            );
-        }
-
-        if (statusFilter && statusFilter !== 'ALL') {
-            filtered = filtered.filter(client => client.status === statusFilter);
-        }
-
-        return filtered;
-    }, [clients]);
-
-    // Buscar cliente por RUT
+    // Get client by RUT - específico de tu negocio
     const getClientByRut = useCallback(async (rut) => {
-        setLoading(true);
-        setError(null);
         try {
-            const response = await apiClient.get(`/client/rut/${encodeURIComponent(rut)}`);
+            const response = await httpClient.get(`/api/v1/clients/rut/${encodeURIComponent(rut)}`);
             return response.data;
         } catch (err) {
             if (err.response?.status === 404) {
                 return null;
             }
-            setError(err.message);
-            return null;
-        } finally {
-            setLoading(false);
+            console.error('Error getting client by RUT:', err);
+            throw new Error(err.message || 'Error al buscar cliente por RUT');
         }
     }, []);
 
-    // Verificar existencia por RUT
+    // Check if client exists by RUT
     const existsByRut = useCallback(async (rut) => {
         try {
-            const response = await apiClient.get(`/client/exists/${encodeURIComponent(rut)}`);
+            const response = await httpClient.get(`/api/v1/clients/exists/${encodeURIComponent(rut)}`);
             return response.data;
         } catch (err) {
             console.error('Error checking RUT existence:', err);
@@ -178,23 +121,41 @@ export const useClients = () => {
         }
     }, []);
 
+    // Filter clients
+    const filterClients = useCallback((searchTerm, statusFilter) => {
+        return clients.filter(client => {
+            const matchesSearch = !searchTerm ||
+                client.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                client.rut.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                client.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                client.phone.toLowerCase().includes(searchTerm.toLowerCase());
+
+            const matchesStatus = statusFilter === 'ALL' ||
+                client.status === statusFilter;
+
+            return matchesSearch && matchesStatus;
+        });
+    }, [clients]);
+
     return {
-        // Estado
+        // State
         clients,
         loading,
         error,
 
-        // Acciones
+        // CRUD operations - nombres iguales al profesor
         loadClients,
         createClient,
         updateClient,
         deleteClient,
+
+        // Client specific operations
         updateClientStatus,
-        filterClients,
         getClientByRut,
         existsByRut,
 
-        // Utilidades
-        clearError
+        // Utilities
+        getClientById,
+        filterClients
     };
 };

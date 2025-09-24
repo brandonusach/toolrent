@@ -12,7 +12,9 @@ import {
     Bell,
     LogOut,
     Home,
-    AlertTriangle
+    AlertTriangle,
+    Package,
+    ClipboardList
 } from 'lucide-react';
 import InventoryManagement from './inventory/InventoryManagement';
 import ClientManagement from './client/ClientManagement';
@@ -35,10 +37,14 @@ const AdminPanel = () => {
 
     const user = getUserInfo();
 
-    // Función mejorada para verificar si es admin usando roles de Keycloak
+    // Función corregida para verificar si es admin usando los roles exactos de Keycloak
     const isUserAdmin = () => {
         const userRoles = user.roles;
-        return userRoles.includes('ADMINISTRATOR') || userRoles.includes('ADMIN');
+        // Buscar exactamente los roles que tienes en Keycloak (en minúscula)
+        return userRoles.includes('administrator') ||
+            userRoles.includes('admin') ||
+            userRoles.includes('ADMINISTRATOR') ||
+            userRoles.includes('ADMIN');
     };
 
     // Función para manejar el logout con Keycloak
@@ -50,37 +56,29 @@ const AdminPanel = () => {
         }
     };
 
-    // Configuración del menú según el rol
-    const getMenuItems = () => {
-        const commonItems = [
-            { id: 'dashboard', icon: Home, label: 'Dashboard' },
-            { id: 'prestamos', icon: RefreshCw, label: 'Préstamos y Devoluciones' },
-            { id: 'reportes', icon: BarChart3, label: 'Reportes y Consultas' }
+    // Configuración COMPLETA del menú con todas las épicas del proyecto
+    const getAllMenuItems = () => {
+        return [
+            { id: 'dashboard', icon: Home, label: 'Dashboard', adminOnly: false },
+            { id: 'inventario', icon: Wrench, label: 'Gestión de Inventario', adminOnly: true },
+            { id: 'prestamos', icon: RefreshCw, label: 'Préstamos y Devoluciones', adminOnly: false },
+            { id: 'clientes', icon: Users, label: 'Gestión de Clientes', adminOnly: true },
+            { id: 'tarifas', icon: DollarSign, label: 'Tarifas y Montos', adminOnly: true },
+            { id: 'kardex', icon: FileText, label: 'Kardex y Movimientos', adminOnly: true },
+            { id: 'reportes', icon: BarChart3, label: 'Reportes y Consultas', adminOnly: false },
+            { id: 'usuarios', icon: Settings, label: 'Usuarios y Roles', adminOnly: true }
         ];
-
-        const adminOnlyItems = [
-            { id: 'inventario', icon: Wrench, label: 'Gestión de Inventario' },
-            { id: 'clientes', icon: Users, label: 'Gestión de Clientes' },
-            { id: 'tarifas', icon: DollarSign, label: 'Tarifas y Montos' },
-            { id: 'kardex', icon: FileText, label: 'Kardex y Movimientos' },
-            { id: 'usuarios', icon: Settings, label: 'Usuarios y Roles' }
-        ];
-
-        if (isUserAdmin()) {
-            return [...commonItems.slice(0, 1), ...adminOnlyItems, ...commonItems.slice(1)];
-        }
-        return commonItems;
     };
 
     // Función para obtener el nombre de visualización del rol
     const getRoleDisplayName = () => {
         const roles = user.roles;
 
-        if (roles.includes('ADMINISTRATOR') || roles.includes('ADMIN')) {
+        if (roles.includes('administrator') || roles.includes('ADMINISTRATOR') || roles.includes('admin') || roles.includes('ADMIN')) {
             return 'Administrador';
-        } else if (roles.includes('EMPLOYEE') || roles.includes('EMPLEADO')) {
+        } else if (roles.includes('employee') || roles.includes('EMPLOYEE') || roles.includes('empleado') || roles.includes('EMPLEADO')) {
             return 'Empleado';
-        } else if (roles.includes('USER') || roles.includes('USUARIO')) {
+        } else if (roles.includes('user') || roles.includes('USER') || roles.includes('usuario') || roles.includes('USUARIO')) {
             return 'Usuario';
         }
 
@@ -99,18 +97,26 @@ const AdminPanel = () => {
 
     const isAdmin = isUserAdmin();
 
+    // Función para verificar si el usuario puede acceder a una sección
+    const canAccess = (section) => {
+        const menuItem = getAllMenuItems().find(item => item.id === section);
+        if (!menuItem) return false;
+        return !menuItem.adminOnly || isAdmin;
+    };
+
     return (
         <div className="min-h-screen bg-gray-900 flex">
-            {/* Debug info - solo en desarrollo */}
+            {/* Debug info mejorado - solo en desarrollo */}
             {process.env.NODE_ENV === 'development' && (
                 <div className="fixed top-4 right-4 bg-gray-800 p-3 rounded text-xs z-50 max-w-xs">
                     <div className="text-gray-400 mb-1">Debug - Keycloak Info:</div>
                     <div className="text-gray-300">Username: {user.username}</div>
                     <div className="text-gray-300">Email: {user.email}</div>
-                    <div className="text-gray-300">Roles: {user.roles.join(', ')}</div>
-                    <div className="text-gray-300">Is Admin: {isAdmin ? 'Sí' : 'NO'}</div>
+                    <div className="text-gray-300">Roles: [{user.roles.join(', ')}]</div>
+                    <div className="text-gray-300">Is Admin: {isAdmin ? 'SÍ' : 'NO'}</div>
                     <div className="text-gray-300">Display Name: {getRoleDisplayName()}</div>
-                    <div className="text-gray-300">Authenticated: {keycloak.authenticated ? 'Sí' : 'No'}</div>
+                    <div className="text-gray-300">Authenticated: {keycloak.authenticated ? 'SÍ' : 'No'}</div>
+                    <div className="text-gray-300">Can Access Current: {canAccess(activeSection) ? 'SÍ' : 'NO'}</div>
                 </div>
             )}
 
@@ -129,16 +135,18 @@ const AdminPanel = () => {
                     </div>
                 </div>
 
-                {/* Navegación */}
+                {/* Navegación - TODAS las opciones visibles siempre */}
                 <nav className="flex-1 p-4">
-                    {getMenuItems().map((item) => {
+                    {getAllMenuItems().map((item) => {
                         const Icon = item.icon;
                         const isActive = activeSection === item.id;
+                        const userCanAccess = canAccess(item.id);
+
                         return (
                             <button
                                 key={item.id}
                                 onClick={() => setActiveSection(item.id)}
-                                className={`w-full flex items-center px-4 py-3 rounded-lg mb-2 transition-colors ${
+                                className={`w-full flex items-center px-4 py-3 rounded-lg mb-2 transition-colors relative ${
                                     isActive
                                         ? 'bg-orange-600 text-white'
                                         : 'text-gray-300 hover:bg-gray-700 hover:text-white'
@@ -146,9 +154,18 @@ const AdminPanel = () => {
                             >
                                 <Icon className="h-5 w-5 mr-3" />
                                 <span className="text-sm font-medium">{item.label}</span>
-                                {item.id === 'tarifas' || item.id === 'usuarios' ? (
+
+                                {/* Indicador de restricción para empleados */}
+                                {item.adminOnly && !isAdmin && (
+                                    <div className="ml-auto flex items-center">
+                                        <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                                    </div>
+                                )}
+
+                                {/* Indicador de admin only */}
+                                {item.adminOnly && isAdmin && (
                                     <span className="ml-auto h-2 w-2 bg-red-500 rounded-full"></span>
-                                ) : null}
+                                )}
                             </button>
                         );
                     })}
@@ -229,38 +246,41 @@ const AdminPanel = () => {
 
                 {/* Main Content Area */}
                 <main className="flex-1 p-6 overflow-auto bg-gray-900">
-                    {/* Gestión de Inventario - Solo para Administradores */}
-                    {activeSection === 'inventario' && isAdmin && (
+                    {/* Gestión de Inventario */}
+                    {activeSection === 'inventario' && canAccess('inventario') && (
                         <InventoryManagement />
                     )}
 
-                    {/* Gestión de Clientes - Solo para Administradores */}
-                    {activeSection === 'clientes' && isAdmin && (
+                    {/* Gestión de Clientes */}
+                    {activeSection === 'clientes' && canAccess('clientes') && (
                         <ClientManagement />
                     )}
 
-                    {/* Gestión de Tarifas - Solo para Administradores */}
-                    {activeSection === 'tarifas' && isAdmin && (
+                    {/* Gestión de Tarifas */}
+                    {activeSection === 'tarifas' && canAccess('tarifas') && (
                         <RateManagement />
                     )}
 
                     {/* Mensaje de acceso denegado para secciones de admin */}
-                    {(activeSection === 'inventario' || activeSection === 'clientes' || activeSection === 'tarifas') && !isAdmin && (
+                    {!canAccess(activeSection) && (
                         <div className="bg-gray-800 rounded-lg p-8 border border-gray-700 text-center">
                             <div className="mb-4">
                                 <AlertTriangle className="h-16 w-16 text-yellow-500 mx-auto" />
                             </div>
                             <h2 className="text-2xl font-bold text-white mb-4">
-                                {activeSection === 'inventario' ? 'Gestión de Inventario' :
-                                    activeSection === 'clientes' ? 'Gestión de Clientes' :
-                                        'Gestión de Tarifas'}
+                                {getAllMenuItems().find(item => item.id === activeSection)?.label}
                             </h2>
                             <p className="text-gray-400 mb-4">
                                 No tienes permisos para acceder a esta sección. Solo disponible para Administradores.
                             </p>
-                            <p className="text-sm text-gray-500 mb-6">
-                                Tu rol actual: {getRoleDisplayName()}
-                            </p>
+                            <div className="bg-gray-700 p-4 rounded-lg mb-6">
+                                <p className="text-sm text-gray-300 mb-2">
+                                    <strong>Tu rol actual:</strong> {getRoleDisplayName()}
+                                </p>
+                                <p className="text-sm text-gray-300">
+                                    <strong>Roles en Keycloak:</strong> [{user.roles.join(', ')}]
+                                </p>
+                            </div>
                             <button
                                 onClick={() => setActiveSection('dashboard')}
                                 className="bg-orange-600 text-white py-2 px-6 rounded-lg hover:bg-orange-700 transition-colors"
@@ -270,28 +290,37 @@ const AdminPanel = () => {
                         </div>
                     )}
 
-                    {/* Todas las demás secciones - Mensaje genérico "En desarrollo" */}
-                    {!['inventario', 'clientes', 'tarifas'].includes(activeSection) && (
+                    {/* Dashboard y otras secciones accesibles */}
+                    {canAccess(activeSection) && !['inventario', 'clientes', 'tarifas'].includes(activeSection) && (
                         <div className="bg-gray-800 rounded-lg p-8 border border-gray-700 text-center">
                             <h2 className="text-2xl font-bold text-white mb-4">
-                                {getMenuItems().find(item => item.id === activeSection)?.label}
+                                {getAllMenuItems().find(item => item.id === activeSection)?.label}
                             </h2>
-                            <p className="text-gray-400">
-                                {!isAdmin && ['kardex', 'usuarios'].includes(activeSection)
-                                    ? 'No tienes permisos para acceder a esta sección. Solo disponible para Administradores.'
-                                    : 'Sección en desarrollo...'}
-                            </p>
-                            {!isAdmin && ['kardex', 'usuarios'].includes(activeSection) && (
-                                <div>
-                                    <p className="text-sm text-gray-500 mt-2 mb-4">
-                                        Tu rol actual: {getRoleDisplayName()}
-                                    </p>
-                                    <button
-                                        onClick={() => setActiveSection('dashboard')}
-                                        className="bg-orange-600 text-white py-2 px-6 rounded-lg hover:bg-orange-700 transition-colors"
-                                    >
-                                        Volver al Dashboard
-                                    </button>
+                            <p className="text-gray-400 mb-4">Sección en desarrollo...</p>
+
+                            {/* Información adicional para el dashboard */}
+                            {activeSection === 'dashboard' && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mt-8">
+                                    <div className="bg-gray-700 p-6 rounded-lg">
+                                        <Package className="h-12 w-12 text-orange-500 mx-auto mb-4" />
+                                        <h3 className="text-xl font-semibold text-white mb-2">Inventario</h3>
+                                        <p className="text-gray-400">Gestión de herramientas disponibles</p>
+                                        {!isAdmin && <p className="text-yellow-400 text-sm mt-2">Solo Administradores</p>}
+                                    </div>
+
+                                    <div className="bg-gray-700 p-6 rounded-lg">
+                                        <RefreshCw className="h-12 w-12 text-blue-500 mx-auto mb-4" />
+                                        <h3 className="text-xl font-semibold text-white mb-2">Préstamos</h3>
+                                        <p className="text-gray-400">Control de préstamos y devoluciones</p>
+                                        <p className="text-green-400 text-sm mt-2">Acceso permitido</p>
+                                    </div>
+
+                                    <div className="bg-gray-700 p-6 rounded-lg">
+                                        <BarChart3 className="h-12 w-12 text-green-500 mx-auto mb-4" />
+                                        <h3 className="text-xl font-semibold text-white mb-2">Reportes</h3>
+                                        <p className="text-gray-400">Consultas y reportes del sistema</p>
+                                        <p className="text-green-400 text-sm mt-2">Acceso permitido</p>
+                                    </div>
                                 </div>
                             )}
                         </div>

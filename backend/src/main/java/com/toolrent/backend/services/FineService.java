@@ -9,7 +9,9 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @Transactional
@@ -226,6 +228,115 @@ public class FineService {
         return fineRepository.findLatestFines(pageable);
     }
 
+    // *** MISSING METHODS ADDED BELOW ***
+
+    // Get all unpaid fines (not filtered by client)
+    public List<FineEntity> getAllUnpaidFines() {
+        return fineRepository.findAll().stream()
+                .filter(fine -> !fine.getPaid())
+                .toList();
+    }
+
+    // Get comprehensive fine statistics
+    public Map<String, Object> getFineStatistics() {
+        Map<String, Object> stats = new HashMap<>();
+
+        // Basic counts
+        long totalFines = fineRepository.count();
+        List<FineEntity> allFines = fineRepository.findAll();
+        long unpaidFines = allFines.stream().filter(f -> !f.getPaid()).count();
+        long paidFines = allFines.stream().filter(f -> f.getPaid()).count();
+        long overdueFines = fineRepository.findOverdueFines(LocalDate.now()).size();
+
+        // Calculate amounts
+        BigDecimal totalUnpaidAmount = allFines.stream()
+                .filter(f -> !f.getPaid())
+                .map(FineEntity::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal totalPaidAmount = allFines.stream()
+                .filter(f -> f.getPaid())
+                .map(FineEntity::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        // By type statistics
+        List<Object[]> typeStats = fineRepository.getFineCountsByType();
+        Map<String, Long> finesByType = new HashMap<>();
+        for (Object[] stat : typeStats) {
+            finesByType.put(stat[0].toString(), ((Number) stat[1]).longValue());
+        }
+
+        stats.put("totalFines", totalFines);
+        stats.put("unpaidFines", unpaidFines);
+        stats.put("paidFines", paidFines);
+        stats.put("overdueFines", overdueFines);
+        stats.put("totalUnpaidAmount", totalUnpaidAmount);
+        stats.put("totalPaidAmount", totalPaidAmount);
+        stats.put("finesByType", finesByType);
+
+        return stats;
+    }
+
+    // Check client restrictions for loan eligibility
+    public Map<String, Object> checkClientRestrictions(Long clientId) {
+        Map<String, Object> restrictions = new HashMap<>();
+
+        try {
+            ClientEntity client = clientService.getClientById(clientId);
+            if (client == null) {
+                restrictions.put("error", "Client not found");
+                return restrictions;
+            }
+
+            // Check if client has unpaid fines
+            boolean hasUnpaidFines = clientHasUnpaidFines(client);
+            BigDecimal totalUnpaidAmount = getTotalUnpaidAmount(client);
+            List<FineEntity> unpaidFines = getUnpaidFinesByClient(client);
+            List<FineEntity> overdueFines = unpaidFines.stream()
+                    .filter(this::isFineOverdue)
+                    .toList();
+
+            // Check client status
+            boolean isRestricted = client.getStatus() == ClientEntity.ClientStatus.RESTRICTED;
+
+            restrictions.put("clientId", clientId);
+            restrictions.put("clientName", client.getName());
+            restrictions.put("clientStatus", client.getStatus().toString());
+            restrictions.put("isRestricted", isRestricted);
+            restrictions.put("hasUnpaidFines", hasUnpaidFines);
+            restrictions.put("totalUnpaidAmount", totalUnpaidAmount != null ? totalUnpaidAmount : BigDecimal.ZERO);
+            restrictions.put("unpaidFinesCount", unpaidFines.size());
+            restrictions.put("overdueFinesCount", overdueFines.size());
+            restrictions.put("canRequestLoan", !isRestricted && !hasUnpaidFines);
+            restrictions.put("restrictionReason", getRestrictionReason(client, hasUnpaidFines, !overdueFines.isEmpty()));
+
+            if (hasUnpaidFines) {
+                restrictions.put("unpaidFines", unpaidFines);
+            }
+
+        } catch (Exception e) {
+            restrictions.put("error", "Error checking client restrictions: " + e.getMessage());
+        }
+
+        return restrictions;
+    }
+
+    // Helper method to determine restriction reason
+    private String getRestrictionReason(ClientEntity client, boolean hasUnpaidFines, boolean hasOverdueFines) {
+        if (client.getStatus() == ClientEntity.ClientStatus.RESTRICTED) {
+            if (hasUnpaidFines) {
+                if (hasOverdueFines) {
+                    return "Client has overdue unpaid fines";
+                } else {
+                    return "Client has unpaid fines";
+                }
+            } else {
+                return "Client is restricted for administrative reasons";
+            }
+        }
+        return "No restrictions";
+    }
+
     // Private helper methods
     private void validateFineCreation(FineEntity fine) throws Exception {
         if (fine.getClient() == null) {
@@ -247,7 +358,6 @@ public class FineService {
         if (fine.getDescription() == null || fine.getDescription().trim().isEmpty()) {
             throw new Exception("Fine description is required");
         }
-
     }
 
     // Update client status based on unpaid fines
@@ -271,7 +381,7 @@ public class FineService {
 
     // Delete fine (only for unpaid fines and admin use)
     @Transactional
-    public void deleteFine(Long fineId ) throws Exception {
+    public void deleteFine(Long fineId) throws Exception {
         FineEntity fine = getFineById(fineId);
 
         if (fine.getPaid()) {

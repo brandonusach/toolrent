@@ -1,6 +1,6 @@
-// hooks/useTools.js - Version con Axios
+// hooks/useTools.js - Siguiendo exactamente el patrón del profesor
 import { useState, useCallback } from 'react';
-
+import httpClient from "../../../../http-common";
 
 export const useTools = () => {
     const [tools, setTools] = useState([]);
@@ -12,7 +12,7 @@ export const useTools = () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await apiClient.get('/tools');
+            const response = await httpClient.get('/api/v1/tools/');
             setTools(response.data || []);
         } catch (err) {
             console.error('Error loading tools:', err);
@@ -23,27 +23,26 @@ export const useTools = () => {
         }
     }, []);
 
-    // Create new tool
+    // Create new tool - igual que profesor con create()
     const createTool = useCallback(async (toolData) => {
         try {
-            const response = await apiClient.post('/tools', toolData);
+            const response = await httpClient.post('/api/v1/tools/', toolData);
             const newTool = response.data;
 
             setTools(prevTools => [...prevTools, newTool]);
             return newTool;
         } catch (err) {
             console.error('Error creating tool:', err);
-            // Mantener la estructura del error para compatibilidad
-            const error = new Error(err.message || 'Error al crear la herramienta');
-            error.response = { data: err.response?.data || err.message };
-            throw error;
+            throw new Error(err.message || 'Error al crear la herramienta');
         }
     }, []);
 
-    // Update tool
+    // Update tool - igual que profesor con update() - envía objeto completo
     const updateTool = useCallback(async (toolId, toolData) => {
         try {
-            const response = await apiClient.put(`/tools/${toolId}`, toolData);
+            // Patrón del profesor: PUT sin ID en URL, objeto completo con ID
+            const toolWithId = { ...toolData, id: toolId };
+            const response = await httpClient.put('/api/v1/tools/', toolWithId);
             const updatedTool = response.data;
 
             setTools(prevTools =>
@@ -54,16 +53,14 @@ export const useTools = () => {
             return updatedTool;
         } catch (err) {
             console.error('Error updating tool:', err);
-            const error = new Error(err.message || 'Error al actualizar la herramienta');
-            error.response = { data: err.response?.data || err.message };
-            throw error;
+            throw new Error(err.message || 'Error al actualizar la herramienta');
         }
     }, []);
 
-    // Delete tool
+    // Delete tool - igual que profesor con remove()
     const deleteTool = useCallback(async (toolId) => {
         try {
-            await apiClient.delete(`/tools/${toolId}`);
+            await httpClient.delete(`/api/v1/tools/${toolId}`);
             setTools(prevTools => prevTools.filter(tool => tool.id !== toolId));
             return true;
         } catch (err) {
@@ -72,10 +69,10 @@ export const useTools = () => {
         }
     }, []);
 
-    // Add stock
+    // Add stock - específico de tu negocio
     const updateStock = useCallback(async (toolId, quantity) => {
         try {
-            const response = await apiClient.post(`/tools/${toolId}/add-stock`, null, {
+            const response = await httpClient.post(`/api/v1/tools/${toolId}/add-stock`, null, {
                 params: { quantity }
             });
             const updatedTool = response.data;
@@ -94,10 +91,10 @@ export const useTools = () => {
         }
     }, []);
 
-    // Decommission tool
+    // Decommission tool - específico de tu negocio
     const decommissionTool = useCallback(async (toolId, quantity) => {
         try {
-            const response = await apiClient.put(`/tools/${toolId}/decommission`, null, {
+            const response = await httpClient.put(`/api/v1/tools/${toolId}/decommission`, null, {
                 params: { quantity }
             });
             const updatedTool = response.data;
@@ -139,7 +136,7 @@ export const useTools = () => {
         loading,
         error,
 
-        // CRUD operations
+        // CRUD operations - nombres iguales al profesor
         loadTools,
         createTool,
         updateTool,

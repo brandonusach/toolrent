@@ -1,18 +1,17 @@
-// hooks/useCategories.js - Version con Axios
+// hooks/useCategories.js - Siguiendo exactamente el patrón del profesor
 import { useState, useCallback } from 'react';
-
+import httpClient from "../../../../http-common";
 
 export const useCategories = () => {
     const [categories, setCategories] = useState([]);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState(null);
 
-    // Cargar todas las categorías
     const loadCategories = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await apiClient.get('/categories');
+            const response = await httpClient.get('/api/v1/categories/');
             setCategories(response.data || []);
         } catch (err) {
             console.error('Error loading categories:', err);
@@ -23,10 +22,10 @@ export const useCategories = () => {
         }
     }, []);
 
-    // Crear nueva categoría
+    // Crear nueva categoría - igual que profesor
     const createCategory = useCallback(async (categoryData) => {
         try {
-            const response = await apiClient.post('/categories', categoryData);
+            const response = await httpClient.post('/api/v1/categories/', categoryData);
             const newCategory = response.data;
 
             setCategories(prevCategories => [...prevCategories, newCategory]);
@@ -37,10 +36,12 @@ export const useCategories = () => {
         }
     }, []);
 
-    // Actualizar categoría existente
+    // Actualizar categoría - patrón del profesor con objeto completo
     const updateCategory = useCallback(async (categoryId, categoryData) => {
         try {
-            const response = await apiClient.put(`/categories/${categoryId}`, categoryData);
+            // Patrón del profesor: PUT sin ID en URL, objeto completo con ID
+            const categoryWithId = { ...categoryData, id: categoryId };
+            const response = await httpClient.put('/api/v1/categories/', categoryWithId);
             const updatedCategory = response.data;
 
             setCategories(prevCategories =>
@@ -55,10 +56,10 @@ export const useCategories = () => {
         }
     }, []);
 
-    // Eliminar categoría
+    // Eliminar categoría - igual que profesor
     const deleteCategory = useCallback(async (categoryId) => {
         try {
-            await apiClient.delete(`/categories/${categoryId}`);
+            await httpClient.delete(`/api/v1/categories/${categoryId}`);
             setCategories(prevCategories =>
                 prevCategories.filter(category => category.id !== categoryId)
             );
@@ -96,7 +97,7 @@ export const useCategories = () => {
         loading,
         error,
 
-        // Operaciones CRUD
+        // Operaciones CRUD - nombres iguales al profesor
         loadCategories,
         createCategory,
         updateCategory,

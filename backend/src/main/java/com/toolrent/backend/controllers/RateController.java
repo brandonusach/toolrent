@@ -2,118 +2,312 @@ package com.toolrent.backend.controllers;
 
 import com.toolrent.backend.entities.RateEntity;
 import com.toolrent.backend.services.RateService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
-@RequestMapping("/api/rates")
+@RequestMapping("/api/v1/rates")
+@CrossOrigin("*")
 public class RateController {
 
-    private final RateService rateService;
+    @Autowired
+    private RateService rateService;
 
-    public RateController(RateService rateService) {
-        this.rateService = rateService;
-    }
+    // ENDPOINTS BÁSICOS PARA TARIFAS ACTUALES
 
-    // RF4.1, RF4.2, RF4.3: Crear tarifas (solo Administrador)
-    @PostMapping
-    @PreAuthorize("hasAuthority('ADMINISTRATOR')")
-    public ResponseEntity<RateEntity> createRate(@RequestBody RateEntity rate) {
-        RateEntity createdRate = rateService.createRate(rate);
-        return ResponseEntity.ok(createdRate);
-    }
-
-    // Obtener tarifa actual de arriendo
     @GetMapping("/current/rental")
-    public ResponseEntity<BigDecimal> getCurrentRentalRate() {
-        BigDecimal rate = rateService.getCurrentRentalRate();
-        return ResponseEntity.ok(rate);
+    public ResponseEntity<?> getCurrentRentalRate() {
+        try {
+            System.out.println("Obteniendo tarifa de arriendo actual...");
+            BigDecimal rate = rateService.getCurrentRentalRate();
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("rate", rate);
+            response.put("success", true);
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            System.err.println("Error en getCurrentRentalRate: " + e.getMessage());
+            e.printStackTrace();
+
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            errorResponse.put("success", false);
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
     }
 
-    // Obtener tarifa actual de multa por atraso
     @GetMapping("/current/late-fee")
-    public ResponseEntity<BigDecimal> getCurrentLateFeeRate() {
-        BigDecimal rate = rateService.getCurrentLateFeeRate();
-        return ResponseEntity.ok(rate);
+    public ResponseEntity<?> getCurrentLateFeeRate() {
+        try {
+            System.out.println("Obteniendo tarifa de multa actual...");
+            BigDecimal rate = rateService.getCurrentLateFeeRate();
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("rate", rate);
+            response.put("success", true);
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            System.err.println("Error en getCurrentLateFeeRate: " + e.getMessage());
+            e.printStackTrace();
+
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            errorResponse.put("success", false);
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
     }
 
-    // Obtener tarifa actual de reparación
     @GetMapping("/current/repair")
-    public ResponseEntity<BigDecimal> getCurrentRepairRate() {
-        BigDecimal rate = rateService.getCurrentRepairRate();
-        return ResponseEntity.ok(rate);
+    public ResponseEntity<?> getCurrentRepairRate() {
+        try {
+            System.out.println("Obteniendo tarifa de reparación actual...");
+            BigDecimal rate = rateService.getCurrentRepairRate();
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("rate", rate);
+            response.put("success", true);
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            System.err.println("Error en getCurrentRepairRate: " + e.getMessage());
+            e.printStackTrace();
+
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            errorResponse.put("success", false);
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
     }
 
-    // Obtener todas las tarifas
-    @GetMapping
-    public ResponseEntity<List<RateEntity>> getAllRates() {
-        List<RateEntity> rates = rateService.getAllRates();
-        return ResponseEntity.ok(rates);
+    // ENDPOINTS CRUD BÁSICOS
+
+    @GetMapping("/")
+    public ResponseEntity<?> listRates() {
+        try {
+            System.out.println("Listando todas las tarifas...");
+            List<RateEntity> rates = rateService.getAllRates();
+            return ResponseEntity.ok(rates);
+        } catch (Exception e) {
+            System.err.println("Error listando tarifas: " + e.getMessage());
+            e.printStackTrace();
+
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
     }
 
-    // Obtener tarifa por ID
     @GetMapping("/{id}")
-    public ResponseEntity<RateEntity> getRateById(@PathVariable Long id) {
-        RateEntity rate = rateService.getRateById(id);
-        return ResponseEntity.ok(rate);
+    public ResponseEntity<?> getRateById(@PathVariable Long id) {
+        try {
+            System.out.println("Obteniendo tarifa con ID: " + id);
+            RateEntity rate = rateService.getRateById(id);
+            return ResponseEntity.ok(rate);
+        } catch (RuntimeException e) {
+            System.err.println("Tarifa no encontrada con ID: " + id);
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Tarifa no encontrada");
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
+        } catch (Exception e) {
+            System.err.println("Error obteniendo tarifa: " + e.getMessage());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
     }
 
-    // Obtener tarifas por tipo
+    @PostMapping("/")
+    public ResponseEntity<?> saveRate(@RequestBody RateEntity rate) {
+        try {
+            System.out.println("Creando nueva tarifa: " + rate);
+            RateEntity newRate = rateService.createRate(rate);
+            return ResponseEntity.ok(newRate);
+        } catch (RuntimeException e) {
+            System.err.println("Error de validación creando tarifa: " + e.getMessage());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+        } catch (Exception e) {
+            System.err.println("Error interno creando tarifa: " + e.getMessage());
+            e.printStackTrace();
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Error interno del servidor: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+
+    @PutMapping("/")
+    public ResponseEntity<?> updateRate(@RequestBody RateEntity rate) {
+        try {
+            System.out.println("Actualizando tarifa: " + rate);
+            if (rate.getId() == null) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", "ID de tarifa es requerido para actualizar");
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+            }
+
+            RateEntity updatedRate = rateService.updateRate(rate.getId(), rate);
+            return ResponseEntity.ok(updatedRate);
+        } catch (RuntimeException e) {
+            System.err.println("Error actualizando tarifa: " + e.getMessage());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+        } catch (Exception e) {
+            System.err.println("Error interno actualizando tarifa: " + e.getMessage());
+            e.printStackTrace();
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Error interno del servidor: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteRateById(@PathVariable Long id) {
+        try {
+            System.out.println("Desactivando tarifa con ID: " + id);
+            RateEntity deactivatedRate = rateService.deactivateRate(id);
+            return ResponseEntity.ok(deactivatedRate);
+        } catch (RuntimeException e) {
+            System.err.println("Error desactivando tarifa: " + e.getMessage());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+        } catch (Exception e) {
+            System.err.println("Error interno desactivando tarifa: " + e.getMessage());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Error interno del servidor: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+
+    // ENDPOINTS ADICIONALES
+
+    @PutMapping("/{id}/deactivate")
+    public ResponseEntity<?> deactivateRate(@PathVariable Long id) {
+        try {
+            System.out.println("Desactivando tarifa con ID: " + id);
+            RateEntity rate = rateService.deactivateRate(id);
+            return ResponseEntity.ok(rate);
+        } catch (Exception e) {
+            System.err.println("Error desactivando tarifa: " + e.getMessage());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+        }
+    }
+
     @GetMapping("/type/{type}")
-    public ResponseEntity<List<RateEntity>> getRatesByType(@PathVariable RateEntity.RateType type) {
-        List<RateEntity> rates = rateService.getRatesByType(type);
-        return ResponseEntity.ok(rates);
+    public ResponseEntity<?> getRatesByType(@PathVariable String type) {
+        try {
+            System.out.println("Obteniendo tarifas por tipo: " + type);
+            RateEntity.RateType rateType = RateEntity.RateType.valueOf(type.toUpperCase());
+            List<RateEntity> rates = rateService.getRatesByType(rateType);
+            return ResponseEntity.ok(rates);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Tipo de tarifa inválido: " + type);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
     }
 
-    // Actualizar tarifa (solo Administrador)
-    @PutMapping("/{id}")
-    @PreAuthorize("hasAuthority('ADMINISTRATOR')")
-    public ResponseEntity<RateEntity> updateRate(@PathVariable Long id,
-                                                 @RequestBody RateEntity rateDetails){
-        RateEntity updatedRate = rateService.updateRate(id, rateDetails);
-        return ResponseEntity.ok(updatedRate);
-    }
-
-    // Desactivar tarifa (solo Administrador)
-    @PatchMapping("/{id}/deactivate")
-    @PreAuthorize("hasAuthority('ADMINISTRATOR')")
-    public ResponseEntity<RateEntity> deactivateRate(@PathVariable Long id) {
-        RateEntity rate = rateService.deactivateRate(id);
-        return ResponseEntity.ok(rate);
-    }
-
-    // Calcular costo de reparación
     @PostMapping("/calculate-repair")
-    public ResponseEntity<BigDecimal> calculateRepairCost(@RequestParam BigDecimal replacementValue) {
-        BigDecimal repairCost = rateService.calculateRepairCost(replacementValue);
-        return ResponseEntity.ok(repairCost);
+    public ResponseEntity<?> calculateRepairCost(@RequestParam BigDecimal replacementValue) {
+        try {
+            System.out.println("Calculando costo de reparación para valor: " + replacementValue);
+            BigDecimal repairCost = rateService.calculateRepairCost(replacementValue);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("repairCost", repairCost);
+            response.put("success", true);
+
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            System.err.println("Error calculando costo de reparación: " + e.getMessage());
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+        }
     }
 
-    // Obtener tarifas en rango de fechas
-    @GetMapping("/date-range")
-    public ResponseEntity<List<RateEntity>> getRatesInDateRange(
-            @RequestParam LocalDate startDate,
-            @RequestParam LocalDate endDate) {
-        List<RateEntity> rates = rateService.getRatesInDateRange(startDate, endDate);
-        return ResponseEntity.ok(rates);
-    }
-
-    // Verificar si existe tarifa activa por tipo
-    @GetMapping("/exists/active/{type}")
-    public ResponseEntity<Boolean> hasActiveRate(@PathVariable RateEntity.RateType type) {
-        boolean exists = rateService.hasActiveRate(type);
-        return ResponseEntity.ok(exists);
-    }
-
-    // Obtener historial de tarifas
     @GetMapping("/history/{type}")
-    public ResponseEntity<List<RateEntity>> getRateHistory(@PathVariable RateEntity.RateType type) {
-        List<RateEntity> history = rateService.getRateHistory(type);
-        return ResponseEntity.ok(history);
+    public ResponseEntity<?> getRateHistory(@PathVariable String type) {
+        try {
+            System.out.println("Obteniendo historial de tarifas para tipo: " + type);
+            RateEntity.RateType rateType = RateEntity.RateType.valueOf(type.toUpperCase());
+            List<RateEntity> history = rateService.getRateHistory(rateType);
+            return ResponseEntity.ok(history);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Tipo de tarifa inválido: " + type);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+
+    @GetMapping("/exists/active/{type}")
+    public ResponseEntity<?> hasActiveRate(@PathVariable String type) {
+        try {
+            RateEntity.RateType rateType = RateEntity.RateType.valueOf(type.toUpperCase());
+            boolean exists = rateService.hasActiveRate(rateType);
+
+            Map<String, Object> response = new HashMap<>();
+            response.put("exists", exists);
+
+            return ResponseEntity.ok(response);
+        } catch (IllegalArgumentException e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Tipo de tarifa inválido: " + type);
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+
+    @GetMapping("/date-range")
+    public ResponseEntity<?> getRatesInDateRange(
+            @RequestParam String startDate,
+            @RequestParam String endDate) {
+        try {
+            LocalDate start = LocalDate.parse(startDate);
+            LocalDate end = LocalDate.parse(endDate);
+            List<RateEntity> rates = rateService.getRatesInDateRange(start, end);
+            return ResponseEntity.ok(rates);
+        } catch (Exception e) {
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", "Error procesando fechas: " + e.getMessage());
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
+        }
+    }
+
+    // ENDPOINT DE PRUEBA
+    @GetMapping("/test")
+    public ResponseEntity<?> testEndpoint() {
+        Map<String, Object> response = new HashMap<>();
+        response.put("message", "Rate controller está funcionando");
+        response.put("timestamp", java.time.LocalDateTime.now());
+        return ResponseEntity.ok(response);
     }
 }

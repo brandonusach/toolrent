@@ -4,7 +4,7 @@ import com.toolrent.backend.entities.FineEntity;
 import com.toolrent.backend.entities.ClientEntity;
 import com.toolrent.backend.services.FineService;
 import com.toolrent.backend.services.ClientService;
-import org.springframework.http.HttpStatus;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -15,283 +15,169 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/fines")
-@CrossOrigin(origins = "*")
+@RequestMapping("/api/v1/fines")
+@CrossOrigin("*")
 public class FineController {
 
-    private final FineService fineService;
-    private final ClientService clientService;
+    @Autowired
+    FineService fineService;
 
-    public FineController(FineService fineService, ClientService clientService) {
-        this.fineService = fineService;
-        this.clientService = clientService;
+    @Autowired
+    ClientService clientService;
+
+    @GetMapping("/")
+    public ResponseEntity<List<FineEntity>> listFines() {
+        List<FineEntity> fines = fineService.getAllFines();
+        return ResponseEntity.ok(fines);
     }
 
-    // GET /api/fines - Get all fines
-    @GetMapping
-    public ResponseEntity<List<FineEntity>> getAllFines() {
-        try {
-            List<FineEntity> fines = fineService.getAllFines();
-            return new ResponseEntity<>(fines, HttpStatus.OK);
-        } catch (Exception e) {
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    // GET /api/fines/{id} - Get fine by ID
     @GetMapping("/{id}")
     public ResponseEntity<FineEntity> getFineById(@PathVariable Long id) {
         try {
             FineEntity fine = fineService.getFineById(id);
-            return new ResponseEntity<>(fine, HttpStatus.OK);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(HttpStatus.NOT_FOUND);
+            return ResponseEntity.ok(fine);
         } catch (Exception e) {
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+            return ResponseEntity.notFound().build();
         }
     }
 
-    // POST /api/fines - Create new fine (Manual creation - Admin only)
-    @PostMapping
-    public ResponseEntity<?> createFine(@RequestBody FineEntity fine) {
+    @PostMapping("/")
+    public ResponseEntity<?> saveFine(@RequestBody FineEntity fine) {
         try {
-            // Validate and fetch entities
-            if (fine.getClient() == null || fine.getClient().getId() == null) {
-                return new ResponseEntity<>("Client ID is required", HttpStatus.BAD_REQUEST);
-            }
-            ClientEntity client = clientService.getClientById(fine.getClient().getId());
-            fine.setClient(client);
-
-            FineEntity createdFine = fineService.createFine(fine);
-            return new ResponseEntity<>(createdFine, HttpStatus.CREATED);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);
+            FineEntity newFine = fineService.createFine(fine);
+            return ResponseEntity.ok(newFine);
         } catch (Exception e) {
-            return new ResponseEntity<>("Error creating fine: " + e.getMessage(),
-                    HttpStatus.INTERNAL_SERVER_ERROR);
+            return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
-    // PUT /api/fines/{id}/pay - Pay fine (RF2.5 - Remove client restriction)
-    @PutMapping("/{id}/pay")
-    public ResponseEntity<?> payFine(@PathVariable Long id,
-                                     @RequestParam(required = false) Long paidByUserId) {
+    // Patrón del profesor - PUT sin ID en la URL, enviando objeto completo con ID
+    @PutMapping("/")
+    public ResponseEntity<?> updateFine(@RequestBody Map<String, Object> updates) {
         try {
-            FineEntity paidFine = fineService.payFine(id);
-            return new ResponseEntity<>(paidFine, HttpStatus.OK);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);
-        } catch (Exception e) {
-            return new ResponseEntity<>("Error paying fine: " + e.getMessage(),
-                    HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    // PUT /api/fines/{id}/cancel - Cancel fine (Admin only)
-    @PutMapping("/{id}/cancel")
-    public ResponseEntity<?> cancelFine(@PathVariable Long id, @RequestParam Long cancelledByUserId) {
-        try {
-            fineService.cancelFine(id);
-            return new ResponseEntity<>("Fine cancelled successfully", HttpStatus.OK);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);
-        } catch (Exception e) {
-            return new ResponseEntity<>("Error cancelling fine: " + e.getMessage(),
-                    HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    // GET /api/fines/client/{clientId} - Get all fines for a client
-    @GetMapping("/client/{clientId}")
-    public ResponseEntity<?> getFinesByClient(@PathVariable Long clientId) {
-        try {
-            ClientEntity client = clientService.getClientById(clientId);
-            List<FineEntity> fines = fineService.getFinesByClient(client);
-            return new ResponseEntity<>(fines, HttpStatus.OK);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(e.getMessage(), HttpStatus.NOT_FOUND);
-        } catch (Exception e) {
-            return new ResponseEntity<>("Error fetching client fines", HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    // GET /api/fines/client/{clientId}/unpaid - Get unpaid fines for client (RF6.2)
-    @GetMapping("/client/{clientId}/unpaid")
-    public ResponseEntity<?> getUnpaidFinesByClient(@PathVariable Long clientId) {
-        try {
-            ClientEntity client = clientService.getClientById(clientId);
-            List<FineEntity> unpaidFines = fineService.getUnpaidFinesByClient(client);
-            return new ResponseEntity<>(unpaidFines, HttpStatus.OK);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(e.getMessage(), HttpStatus.NOT_FOUND);
-        } catch (Exception e) {
-            return new ResponseEntity<>("Error fetching unpaid fines", HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
-
-
-    // GET /api/fines/type/{type} - Get fines by type
-    @GetMapping("/type/{type}")
-    public ResponseEntity<?> getFinesByType(@PathVariable String type) {
-        try {
-            FineEntity.FineType fineType = FineEntity.FineType.valueOf(type.toUpperCase());
-            List<FineEntity> fines = fineService.getFinesByType(fineType);
-            return new ResponseEntity<>(fines, HttpStatus.OK);
-        } catch (IllegalArgumentException e) {
-            return new ResponseEntity<>("Invalid fine type: " + type, HttpStatus.BAD_REQUEST);
-        } catch (Exception e) {
-            return new ResponseEntity<>("Error fetching fines by type", HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    // GET /api/fines/overdue - Get overdue fines
-    @GetMapping("/overdue")
-    public ResponseEntity<List<FineEntity>> getOverdueFines() {
-        try {
-            List<FineEntity> overdueFines = fineService.getOverdueFines();
-            return new ResponseEntity<>(overdueFines, HttpStatus.OK);
-        } catch (Exception e) {
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    // GET /api/fines/unpaid - Get all unpaid fines
-    @GetMapping("/unpaid")
-    public ResponseEntity<List<FineEntity>> getAllUnpaidFines() {
-        try {
-            List<FineEntity> unpaidFines = fineService.getAllFines().stream()
-                    .filter(fine -> !fine.getPaid())
-                    .toList();
-            return new ResponseEntity<>(unpaidFines, HttpStatus.OK);
-        } catch (Exception e) {
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    // GET /api/fines/client/{clientId}/total-unpaid - Get total unpaid amount for client
-    @GetMapping("/client/{clientId}/total-unpaid")
-    public ResponseEntity<?> getTotalUnpaidAmount(@PathVariable Long clientId) {
-        try {
-            ClientEntity client = clientService.getClientById(clientId);
-            BigDecimal totalUnpaid = fineService.getTotalUnpaidAmount(client);
-            return new ResponseEntity<>(Map.of("totalUnpaid", totalUnpaid), HttpStatus.OK);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(e.getMessage(), HttpStatus.NOT_FOUND);
-        } catch (Exception e) {
-            return new ResponseEntity<>("Error calculating total unpaid", HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    // GET /api/fines/reports/statistics - Get fine statistics
-    @GetMapping("/reports/statistics")
-    public ResponseEntity<?> getFineStatistics() {
-        try {
-            List<Object[]> statsByType = fineService.getFineStatsByType();
-            List<FineEntity> allFines = fineService.getAllFines();
-
-            long totalFines = allFines.size();
-            long unpaidFines = allFines.stream().filter(f -> !f.getPaid()).count();
-            long overdueFines = fineService.getOverdueFines().size();
-
-            BigDecimal totalUnpaidAmount = allFines.stream()
-                    .filter(f -> !f.getPaid())
-                    .map(FineEntity::getAmount)
-                    .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-            Map<String, Object> statistics = Map.of(
-                    "totalFines", totalFines,
-                    "unpaidFines", unpaidFines,
-                    "overdueFines", overdueFines,
-                    "totalUnpaidAmount", totalUnpaidAmount,
-                    "finesByType", statsByType
-            );
-
-            return new ResponseEntity<>(statistics, HttpStatus.OK);
-        } catch (Exception e) {
-            return new ResponseEntity<>("Error generating statistics", HttpStatus.INTERNAL_SERVER_ERROR);
-        }
-    }
-
-    // PUT /api/fines/{id} - Update fine details (Admin only)
-    @PutMapping("/{id}")
-    public ResponseEntity<?> updateFine(@PathVariable Long id, @RequestBody Map<String, Object> updates) {
-        try {
+            Long id = Long.valueOf(updates.get("id").toString());
             String description = (String) updates.get("description");
             LocalDate dueDate = updates.get("dueDate") != null ?
                     LocalDate.parse(updates.get("dueDate").toString()) : null;
 
             FineEntity updatedFine = fineService.updateFine(id, description, dueDate);
-            return new ResponseEntity<>(updatedFine, HttpStatus.OK);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);
+            return ResponseEntity.ok(updatedFine);
         } catch (Exception e) {
-            return new ResponseEntity<>("Error updating fine: " + e.getMessage(),
-                    HttpStatus.INTERNAL_SERVER_ERROR);
+            return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
-    // DELETE /api/fines/{id} - Delete fine (Admin only, unpaid fines only)
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> deleteFine(@PathVariable Long id, @RequestParam Long deletedByUserId) {
+    public ResponseEntity<?> deleteFineById(@PathVariable Long id) {
         try {
             fineService.deleteFine(id);
-            return new ResponseEntity<>("Fine deleted successfully", HttpStatus.OK);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);
+            return ResponseEntity.noContent().build();
         } catch (Exception e) {
-            return new ResponseEntity<>("Error deleting fine: " + e.getMessage(),
-                    HttpStatus.INTERNAL_SERVER_ERROR);
+            return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
-    // GET /api/fines/reports/date-range - Get fines in date range
-    @GetMapping("/reports/date-range")
-    public ResponseEntity<?> getFinesInDateRange(
-            @RequestParam String startDate,
-            @RequestParam String endDate) {
+    // Endpoints específicos del negocio
+    @PutMapping("/{id}/pay")
+    public ResponseEntity<?> payFine(@PathVariable Long id) {
         try {
-            LocalDateTime start = LocalDate.parse(startDate).atStartOfDay();
-            LocalDateTime end = LocalDate.parse(endDate).atTime(23, 59, 59);
-
-            List<FineEntity> fines = fineService.getFinesInDateRange(start, end);
-            return new ResponseEntity<>(fines, HttpStatus.OK);
+            FineEntity paidFine = fineService.payFine(id);
+            return ResponseEntity.ok(paidFine);
         } catch (Exception e) {
-            return new ResponseEntity<>("Error fetching fines in date range: " + e.getMessage(),
-                    HttpStatus.BAD_REQUEST);
+            return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
-    // GET /api/fines/latest - Get latest fines (for dashboard)
-    @GetMapping("/latest")
-    public ResponseEntity<List<FineEntity>> getLatestFines(@RequestParam(defaultValue = "10") int limit) {
+    @PutMapping("/{id}/cancel")
+    public ResponseEntity<?> cancelFine(@PathVariable Long id) {
         try {
-            List<FineEntity> latestFines = fineService.getLatestFines(limit);
-            return new ResponseEntity<>(latestFines, HttpStatus.OK);
+            fineService.cancelFine(id);
+            return ResponseEntity.ok("Fine cancelled successfully");
         } catch (Exception e) {
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+            return ResponseEntity.badRequest().body(e.getMessage());
         }
     }
 
-    // POST /api/fines/client/{clientId}/check-restrictions - Check if client is restricted by fines
-    @PostMapping("/client/{clientId}/check-restrictions")
-    public ResponseEntity<?> checkClientRestrictions(@PathVariable Long clientId) {
+    @GetMapping("/client/{clientId}")
+    public ResponseEntity<?> getFinesByClient(@PathVariable Long clientId) {
         try {
             ClientEntity client = clientService.getClientById(clientId);
-            boolean hasUnpaidFines = fineService.clientHasUnpaidFines(client);
-            BigDecimal totalUnpaid = fineService.getTotalUnpaidAmount(client);
-
-            Map<String, Object> restrictions = Map.of(
-                    "hasUnpaidFines", hasUnpaidFines,
-                    "totalUnpaidAmount", totalUnpaid,
-                    "isRestricted", client.getStatus() == ClientEntity.ClientStatus.RESTRICTED,
-                    "canRequestLoans", !hasUnpaidFines && client.getStatus() == ClientEntity.ClientStatus.ACTIVE
-            );
-
-            return new ResponseEntity<>(restrictions, HttpStatus.OK);
-        } catch (RuntimeException e) {
-            return new ResponseEntity<>(e.getMessage(), HttpStatus.NOT_FOUND);
+            if (client == null) {
+                return ResponseEntity.notFound().build();
+            }
+            List<FineEntity> fines = fineService.getFinesByClient(client);
+            return ResponseEntity.ok(fines);
         } catch (Exception e) {
-            return new ResponseEntity<>("Error checking restrictions", HttpStatus.INTERNAL_SERVER_ERROR);
+            return ResponseEntity.badRequest().body(e.getMessage());
         }
+    }
+
+    @GetMapping("/client/{clientId}/unpaid")
+    public ResponseEntity<?> getUnpaidFinesByClient(@PathVariable Long clientId) {
+        try {
+            ClientEntity client = clientService.getClientById(clientId);
+            if (client == null) {
+                return ResponseEntity.notFound().build();
+            }
+            List<FineEntity> unpaidFines = fineService.getUnpaidFinesByClient(client);
+            return ResponseEntity.ok(unpaidFines);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @GetMapping("/client/{clientId}/total-unpaid")
+    public ResponseEntity<?> getTotalUnpaidAmount(@PathVariable Long clientId) {
+        try {
+            ClientEntity client = clientService.getClientById(clientId);
+            if (client == null) {
+                return ResponseEntity.notFound().build();
+            }
+            BigDecimal totalUnpaid = fineService.getTotalUnpaidAmount(client);
+            return ResponseEntity.ok(Map.of("totalUnpaid", totalUnpaid));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(e.getMessage());
+        }
+    }
+
+    @GetMapping("/unpaid")
+    public ResponseEntity<List<FineEntity>> getAllUnpaidFines() {
+        List<FineEntity> unpaidFines = fineService.getAllUnpaidFines();
+        return ResponseEntity.ok(unpaidFines);
+    }
+
+    @GetMapping("/overdue")
+    public ResponseEntity<List<FineEntity>> getOverdueFines() {
+        List<FineEntity> overdueFines = fineService.getOverdueFines();
+        return ResponseEntity.ok(overdueFines);
+    }
+
+    @GetMapping("/type/{type}")
+    public ResponseEntity<List<FineEntity>> getFinesByType(@PathVariable String type) {
+        FineEntity.FineType fineType = FineEntity.FineType.valueOf(type.toUpperCase());
+        List<FineEntity> fines = fineService.getFinesByType(fineType);
+        return ResponseEntity.ok(fines);
+    }
+
+    @GetMapping("/statistics")
+    public ResponseEntity<Map<String, Object>> getFineStatistics() {
+        Map<String, Object> statistics = fineService.getFineStatistics();
+        return ResponseEntity.ok(statistics);
+    }
+
+    @GetMapping("/date-range")
+    public ResponseEntity<List<FineEntity>> getFinesInDateRange(
+            @RequestParam String startDate,
+            @RequestParam String endDate) {
+        LocalDateTime start = LocalDate.parse(startDate).atStartOfDay();
+        LocalDateTime end = LocalDate.parse(endDate).atTime(23, 59, 59);
+        List<FineEntity> fines = fineService.getFinesInDateRange(start, end);
+        return ResponseEntity.ok(fines);
+    }
+
+    @PostMapping("/{clientId}/check-restrictions")
+    public ResponseEntity<Map<String, Object>> checkClientRestrictions(@PathVariable Long clientId) {
+        Map<String, Object> restrictions = fineService.checkClientRestrictions(clientId);
+        return ResponseEntity.ok(restrictions);
     }
 }

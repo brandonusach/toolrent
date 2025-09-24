@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -35,9 +36,12 @@ public class RateEntity {
     @Column(name = "effective_to")
     private LocalDate effectiveTo;
 
-
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
+
+    // Campo faltante que causa el error
+    @Column(name = "created_by", nullable = false)
+    private String createdBy;
 
     @PrePersist
     protected void onCreate() {

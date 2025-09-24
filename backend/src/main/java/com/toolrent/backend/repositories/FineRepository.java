@@ -18,22 +18,41 @@ public interface FineRepository extends JpaRepository<FineEntity, Long> {
     // RF2.5: Find unpaid fines by client to block new loans
     List<FineEntity> findByClientAndPaidFalse(ClientEntity client);
 
+    // Find paid fines by client
+    List<FineEntity> findByClientAndPaidTrue(ClientEntity client);
+
+    // Find all unpaid fines
+    List<FineEntity> findByPaidFalse();
+
     // Check if client has unpaid fines
     @Query("SELECT COUNT(f) FROM FineEntity f WHERE f.client = :client AND f.paid = false")
     long countUnpaidFinesByClient(@Param("client") ClientEntity client);
 
+    // Count methods for statistics
+    long countByPaidFalse();
+    long countByPaidTrue();
+
+    // Count overdue fines
+    @Query("SELECT COUNT(f) FROM FineEntity f WHERE f.paid = false AND f.dueDate < :currentDate")
+    long countOverdueFines(@Param("currentDate") LocalDate currentDate);
+
     // Get total unpaid amount for a client
     @Query("SELECT COALESCE(SUM(f.amount), 0) FROM FineEntity f WHERE f.client = :client AND f.paid = false")
     BigDecimal getTotalUnpaidAmountByClient(@Param("client") ClientEntity client);
+
+    // Get total unpaid amount for all clients
+    @Query("SELECT COALESCE(SUM(f.amount), 0) FROM FineEntity f WHERE f.paid = false")
+    BigDecimal getTotalUnpaidAmount();
+
+    // Get total paid amount for all clients
+    @Query("SELECT COALESCE(SUM(f.amount), 0) FROM FineEntity f WHERE f.paid = true")
+    BigDecimal getTotalPaidAmount();
 
     // Find fines by loan
     List<FineEntity> findByLoan(LoanEntity loan);
 
     // Find fines by type
     List<FineEntity> findByType(FineEntity.FineType type);
-
-    // Find paid fines by client
-    List<FineEntity> findByClientAndPaidTrue(ClientEntity client);
 
     // Find overdue fines (unpaid and past due date)
     @Query("SELECT f FROM FineEntity f WHERE f.paid = false AND f.dueDate < :currentDate")

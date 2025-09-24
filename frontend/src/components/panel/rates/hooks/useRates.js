@@ -1,6 +1,6 @@
-// hooks/useRates.js - Hook para gestión de tarifas con Axios - CORREGIDO
+// hooks/useRates.js - Hook simplificado para gestión de tarifas
 import { useState, useCallback } from 'react';
-
+import httpClient from "../../../../http-common";
 
 export const useRates = () => {
     const [rates, setRates] = useState({
@@ -16,48 +16,41 @@ export const useRates = () => {
         setError(null);
     }, []);
 
-    // Cargar todas las tarifas - CORREGIDO: Quitar /api duplicado
+    // Cargar todas las tarifas
     const loadRates = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            const response = await apiClient.get('/rates'); // CORREGIDO: era '/api/rates'
+            const response = await httpClient.get('/api/v1/rates/');
             setRates(prev => ({
                 ...prev,
                 all: response.data || []
             }));
         } catch (err) {
             console.error('Error loading rates:', err);
-            setError(err.message || 'Error al cargar tarifas');
+            setError(err.response?.data?.error || 'Error al cargar tarifas');
         } finally {
             setLoading(false);
         }
     }, []);
 
-    // Obtener tarifas actuales - CORREGIDO: URLs consistentes
+    // Obtener tarifas actuales - SIMPLIFICADO
     const getCurrentRates = useCallback(async () => {
         setLoading(true);
         setError(null);
         try {
-            // CORREGIDO: URLs consistentes sin /api duplicado
-            const [rentalResponse, lateFeeResponse, repairResponse] = await Promise.allSettled([
-                apiClient.get('/rates/current/rental'),      // CORREGIDO
-                apiClient.get('/rates/current/late-fee'),    // CORREGIDO
-                apiClient.get('/rates/current/repair')       // CORREGIDO
+            // El backend maneja la lógica de crear tarifas por defecto si no existen
+            const [rentalRes, lateFeeRes, repairRes] = await Promise.all([
+                httpClient.get('/api/v1/rates/current/rental'),
+                httpClient.get('/api/v1/rates/current/late-fee'),
+                httpClient.get('/api/v1/rates/current/repair')
             ]);
 
             const currentRates = {
-                RENTAL_RATE: rentalResponse.status === 'fulfilled' ? rentalResponse.value.data : 0,
-                LATE_FEE_RATE: lateFeeResponse.status === 'fulfilled' ? lateFeeResponse.value.data : 0,
-                REPAIR_RATE: repairResponse.status === 'fulfilled' ? repairResponse.value.data : 0
+                RENTAL_RATE: rentalRes.data.rate || 0,
+                LATE_FEE_RATE: lateFeeRes.data.rate || 0,
+                REPAIR_RATE: repairRes.data.rate || 0
             };
-
-            // Log individual results para debugging
-            console.log('Current rates loaded:', {
-                rental: { status: rentalResponse.status, value: currentRates.RENTAL_RATE },
-                lateFee: { status: lateFeeResponse.status, value: currentRates.LATE_FEE_RATE },
-                repair: { status: repairResponse.status, value: currentRates.REPAIR_RATE }
-            });
 
             setRates(prev => ({
                 ...prev,
@@ -67,9 +60,8 @@ export const useRates = () => {
             return currentRates;
         } catch (err) {
             console.error('Error getting current rates:', err);
-            setError(err.message || 'Error al obtener tarifas actuales');
+            setError(err.response?.data?.error || 'Error al obtener tarifas actuales');
 
-            // Retornar valores por defecto en caso de error
             const defaultRates = {
                 RENTAL_RATE: 0,
                 LATE_FEE_RATE: 0,
@@ -87,13 +79,11 @@ export const useRates = () => {
         }
     }, []);
 
-    // Crear nueva tarifa - CORREGIDO
+    // Crear nueva tarifa
     const createRate = useCallback(async (rateData) => {
-        setLoading(true);
-        setError(null);
         try {
             console.log('Creating rate:', rateData);
-            const response = await apiClient.post('/rates', rateData); // CORREGIDO
+            const response = await httpClient.post('/api/v1/rates/', rateData);
             const newRate = response.data;
 
             // Actualizar estado local
@@ -102,32 +92,24 @@ export const useRates = () => {
                 all: [...prev.all, newRate]
             }));
 
-            // Actualizar tarifas actuales si es necesario
-            if (newRate.active) {
-                await getCurrentRates();
-            }
+            // Recargar tarifas actuales
+            await getCurrentRates();
 
             return newRate;
         } catch (err) {
             console.error('Error creating rate:', err);
-            const errorMsg = err.response?.data?.message ||
-            err.response?.status === 409 ? 'Ya existe una tarifa activa que se superpone con el rango de fechas' :
-                err.response?.status === 401 ? 'No autorizado. Verifique su sesión.' :
-                    err.message || 'Error al crear tarifa';
+            const errorMsg = err.response?.data?.error || 'Error al crear tarifa';
             setError(errorMsg);
             throw new Error(errorMsg);
-        } finally {
-            setLoading(false);
         }
     }, [getCurrentRates]);
 
-    // Actualizar tarifa existente - CORREGIDO
+    // Actualizar tarifa existente
     const updateRate = useCallback(async (rateId, rateData) => {
-        setLoading(true);
-        setError(null);
         try {
             console.log('Updating rate:', { rateId, rateData });
-            const response = await apiClient.put(`/rates/${rateId}`, rateData); // CORREGIDO
+            const rateWithId = { ...rateData, id: rateId };
+            const response = await httpClient.put('/api/v1/rates/', rateWithId);
             const updatedRate = response.data;
 
             // Actualizar estado local
@@ -138,31 +120,23 @@ export const useRates = () => {
                 )
             }));
 
-            // Actualizar tarifas actuales
+            // Recargar tarifas actuales
             await getCurrentRates();
 
             return updatedRate;
         } catch (err) {
             console.error('Error updating rate:', err);
-            const errorMsg = err.response?.data?.message ||
-            err.response?.status === 404 ? 'Tarifa no encontrada' :
-                err.response?.status === 409 ? 'Existe una tarifa activa que se superpone con el rango de fechas' :
-                    err.response?.status === 401 ? 'No autorizado. Verifique su sesión.' :
-                        err.message || 'Error al actualizar tarifa';
+            const errorMsg = err.response?.data?.error || 'Error al actualizar tarifa';
             setError(errorMsg);
             throw new Error(errorMsg);
-        } finally {
-            setLoading(false);
         }
     }, [getCurrentRates]);
 
-    // Desactivar tarifa - CORREGIDO
+    // Desactivar tarifa
     const deactivateRate = useCallback(async (rateId) => {
-        setLoading(true);
-        setError(null);
         try {
             console.log('Deactivating rate:', rateId);
-            const response = await apiClient.patch(`/rates/${rateId}/deactivate`); // CORREGIDO
+            const response = await httpClient.put(`/api/v1/rates/${rateId}/deactivate`);
             const deactivatedRate = response.data;
 
             // Actualizar estado local
@@ -173,35 +147,28 @@ export const useRates = () => {
                 )
             }));
 
-            // Actualizar tarifas actuales
+            // Recargar tarifas actuales
             await getCurrentRates();
 
             return deactivatedRate;
         } catch (err) {
             console.error('Error deactivating rate:', err);
-            const errorMsg = err.response?.data?.message ||
-            err.response?.status === 404 ? 'Tarifa no encontrada' :
-                err.response?.status === 401 ? 'No autorizado. Verifique su sesión.' :
-                    err.message || 'Error al desactivar tarifa';
+            const errorMsg = err.response?.data?.error || 'Error al desactivar tarifa';
             setError(errorMsg);
             throw new Error(errorMsg);
-        } finally {
-            setLoading(false);
         }
     }, [getCurrentRates]);
 
-    // Obtener tarifa por ID - CORREGIDO
+    // Obtener tarifa por ID
     const getRateById = useCallback(async (rateId) => {
         setLoading(true);
         setError(null);
         try {
-            const response = await apiClient.get(`/rates/${rateId}`); // CORREGIDO
+            const response = await httpClient.get(`/api/v1/rates/${rateId}`);
             return response.data;
         } catch (err) {
             console.error('Error getting rate by ID:', err);
-            const errorMsg = err.response?.status === 404 ? 'Tarifa no encontrada' :
-                err.response?.status === 401 ? 'No autorizado. Verifique su sesión.' :
-                    err.message || 'Error al obtener tarifa';
+            const errorMsg = err.response?.data?.error || 'Error al obtener tarifa';
             setError(errorMsg);
             throw new Error(errorMsg);
         } finally {
@@ -209,29 +176,28 @@ export const useRates = () => {
         }
     }, []);
 
-    // Obtener tarifas por tipo - CORREGIDO
+    // Obtener tarifas por tipo
     const getRatesByType = useCallback(async (rateType) => {
         setLoading(true);
         setError(null);
         try {
-            const response = await apiClient.get(`/rates/type/${rateType}`); // CORREGIDO
+            const response = await httpClient.get(`/api/v1/rates/type/${rateType}`);
             return response.data || [];
         } catch (err) {
             console.error('Error getting rates by type:', err);
-            setError(err.message || 'Error al obtener tarifas por tipo');
+            setError(err.response?.data?.error || 'Error al obtener tarifas por tipo');
             return [];
         } finally {
             setLoading(false);
         }
     }, []);
 
-    // Obtener historial de tarifas - CORREGIDO
+    // Obtener historial de tarifas
     const getRateHistory = useCallback(async (rateType) => {
         setLoading(true);
         setError(null);
         try {
-            console.log('Getting rate history for type:', rateType);
-            const response = await apiClient.get(`/rates/history/${rateType}`); // CORREGIDO
+            const response = await httpClient.get(`/api/v1/rates/history/${rateType}`);
             const history = response.data || [];
 
             setRates(prev => ({
@@ -245,25 +211,25 @@ export const useRates = () => {
             return history;
         } catch (err) {
             console.error('Error getting rate history:', err);
-            setError(err.message || 'Error al obtener historial de tarifas');
+            setError(err.response?.data?.error || 'Error al obtener historial de tarifas');
             return [];
         } finally {
             setLoading(false);
         }
     }, []);
 
-    // Verificar si existe tarifa activa por tipo - CORREGIDO
+    // Verificar si existe tarifa activa por tipo
     const hasActiveRate = useCallback(async (rateType) => {
         try {
-            const response = await apiClient.get(`/rates/exists/active/${rateType}`); // CORREGIDO
-            return response.data;
+            const response = await httpClient.get(`/api/v1/rates/exists/active/${rateType}`);
+            return response.data?.exists || false;
         } catch (err) {
             console.error('Error checking active rate:', err);
             return false;
         }
     }, []);
 
-    // Obtener tarifas en rango de fechas - CORREGIDO
+    // Obtener tarifas en rango de fechas
     const getRatesInDateRange = useCallback(async (startDate, endDate) => {
         setLoading(true);
         setError(null);
@@ -272,34 +238,27 @@ export const useRates = () => {
             if (startDate) params.append('startDate', startDate);
             if (endDate) params.append('endDate', endDate);
 
-            const response = await apiClient.get(`/rates/date-range?${params.toString()}`); // CORREGIDO
+            const response = await httpClient.get(`/api/v1/rates/date-range?${params.toString()}`);
             return response.data || [];
         } catch (err) {
             console.error('Error getting rates in date range:', err);
-            setError(err.message || 'Error al obtener tarifas por rango de fechas');
+            setError(err.response?.data?.error || 'Error al obtener tarifas por rango de fechas');
             return [];
         } finally {
             setLoading(false);
         }
     }, []);
 
-    // Calcular costo de reparación - CORREGIDO
+    // Calcular costo de reparación
     const calculateRepairCost = useCallback(async (replacementValue) => {
         setLoading(true);
         setError(null);
         try {
-            console.log('Calculating repair cost for value:', replacementValue);
-            const params = new URLSearchParams();
-            params.append('replacementValue', replacementValue);
-
-            const response = await apiClient.post(`/rates/calculate-repair?${params.toString()}`); // CORREGIDO
-            return response.data;
+            const response = await httpClient.post(`/api/v1/rates/calculate-repair?replacementValue=${replacementValue}`);
+            return response.data?.repairCost || 0;
         } catch (err) {
             console.error('Error calculating repair cost:', err);
-            const errorMsg = err.response?.data?.message ||
-            err.response?.status === 401 ? 'No autorizado. Verifique su sesión.' :
-                'No hay tarifa de reparación activa configurada' ||
-                err.message || 'Error al calcular costo de reparación';
+            const errorMsg = err.response?.data?.error || 'Error al calcular costo de reparación';
             setError(errorMsg);
             throw new Error(errorMsg);
         } finally {
@@ -307,67 +266,22 @@ export const useRates = () => {
         }
     }, []);
 
-    // Obtener tarifa actual por tipo específico - CORREGIDO
-    const getCurrentRateByType = useCallback(async (rateType) => {
-        setError(null);
+    // Eliminar tarifa
+    const deleteRate = useCallback(async (rateId) => {
         try {
-            let endpoint = '';
-            switch (rateType) {
-                case 'RENTAL_RATE':
-                    endpoint = '/rates/current/rental';      // CORREGIDO
-                    break;
-                case 'LATE_FEE_RATE':
-                    endpoint = '/rates/current/late-fee';    // CORREGIDO
-                    break;
-                case 'REPAIR_RATE':
-                    endpoint = '/rates/current/repair';      // CORREGIDO
-                    break;
-                default:
-                    throw new Error('Tipo de tarifa no válido');
-            }
-
-            const response = await apiClient.get(endpoint);
-            return response.data;
+            await httpClient.delete(`/api/v1/rates/${rateId}`);
+            setRates(prev => ({
+                ...prev,
+                all: prev.all.filter(rate => rate.id !== rateId)
+            }));
+            return true;
         } catch (err) {
-            if (err.response?.status === 404 || err.message.includes('No hay tarifa')) {
-                return null; // No hay tarifa activa configurada
-            }
-            console.error('Error getting current rate by type:', err);
-            setError(err.message || 'Error al obtener tarifa actual');
-            throw err;
+            console.error('Error deleting rate:', err);
+            const errorMsg = err.response?.data?.error || 'Error al eliminar la tarifa';
+            setError(errorMsg);
+            throw new Error(errorMsg);
         }
     }, []);
-
-    // Validar solapamiento de fechas
-    const validateRateOverlap = useCallback(async (rateType, startDate, endDate, excludeId = null) => {
-        try {
-            const rates = await getRatesByType(rateType);
-            const activeRates = rates.filter(rate =>
-                rate.active &&
-                (!excludeId || rate.id !== excludeId)
-            );
-
-            for (const rate of activeRates) {
-                const rateStart = new Date(rate.effectiveFrom);
-                const rateEnd = rate.effectiveTo ? new Date(rate.effectiveTo) : new Date('2099-12-31');
-                const newStart = new Date(startDate);
-                const newEnd = endDate ? new Date(endDate) : new Date('2099-12-31');
-
-                // Verificar solapamiento
-                if (newStart <= rateEnd && newEnd >= rateStart) {
-                    return {
-                        hasOverlap: true,
-                        overlappingRate: rate
-                    };
-                }
-            }
-
-            return { hasOverlap: false };
-        } catch (err) {
-            console.error('Error validating overlap:', err);
-            return { hasOverlap: false };
-        }
-    }, [getRatesByType]);
 
     return {
         // Estado
@@ -379,20 +293,19 @@ export const useRates = () => {
         loadRates,
         createRate,
         updateRate,
+        deleteRate,
         deactivateRate,
         getRateById,
         getRatesByType,
 
         // Acciones específicas
         getCurrentRates,
-        getCurrentRateByType,
         getRateHistory,
         hasActiveRate,
         getRatesInDateRange,
         calculateRepairCost,
 
         // Utilidades
-        validateRateOverlap,
         clearError
     };
 };
