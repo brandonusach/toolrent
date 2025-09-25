@@ -12,6 +12,7 @@ import Placeholder from './Placeholder';
 import InventoryManagement from './inventory/InventoryManagement';
 import ClientManagement from './client/ClientManagement';
 import RateManagement from './rates/RateManagement';
+import LoanManagement from './loans/LoanManagement';
 
 const AdminPanel = () => {
     const { keycloak } = useKeycloak();
@@ -41,6 +42,7 @@ const AdminPanel = () => {
             inventario: <InventoryManagement />,
             clientes: <ClientManagement />,
             tarifas: <RateManagement />,
+            prestamos: <LoanManagement />,
             dashboard: <DashboardView isAdmin={isAdmin} />,
         };
 
