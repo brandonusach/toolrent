@@ -20,10 +20,10 @@ import java.util.Map;
 public class FineController {
 
     @Autowired
-    FineService fineService;
+    private FineService fineService;
 
     @Autowired
-    ClientService clientService;
+    private ClientService clientService;
 
     @GetMapping("/")
     public ResponseEntity<List<FineEntity>> listFines() {
@@ -33,111 +33,66 @@ public class FineController {
 
     @GetMapping("/{id}")
     public ResponseEntity<FineEntity> getFineById(@PathVariable Long id) {
-        try {
-            FineEntity fine = fineService.getFineById(id);
-            return ResponseEntity.ok(fine);
-        } catch (Exception e) {
-            return ResponseEntity.notFound().build();
-        }
+        FineEntity fine = fineService.getFineById(id);
+        return ResponseEntity.ok(fine);
     }
 
     @PostMapping("/")
-    public ResponseEntity<?> saveFine(@RequestBody FineEntity fine) {
-        try {
-            FineEntity newFine = fineService.createFine(fine);
-            return ResponseEntity.ok(newFine);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+    public ResponseEntity<FineEntity> saveFine(@RequestBody FineEntity fine) {
+        FineEntity newFine = fineService.createFine(fine);
+        return ResponseEntity.ok(newFine);
     }
 
     // Patrón del profesor - PUT sin ID en la URL, enviando objeto completo con ID
     @PutMapping("/")
-    public ResponseEntity<?> updateFine(@RequestBody Map<String, Object> updates) {
-        try {
-            Long id = Long.valueOf(updates.get("id").toString());
-            String description = (String) updates.get("description");
-            LocalDate dueDate = updates.get("dueDate") != null ?
-                    LocalDate.parse(updates.get("dueDate").toString()) : null;
+    public ResponseEntity<FineEntity> updateFine(@RequestBody Map<String, Object> updates) throws Exception {
+        Long id = Long.valueOf(updates.get("id").toString());
+        String description = (String) updates.get("description");
+        LocalDate dueDate = updates.get("dueDate") != null ?
+                LocalDate.parse(updates.get("dueDate").toString()) : null;
 
-            FineEntity updatedFine = fineService.updateFine(id, description, dueDate);
-            return ResponseEntity.ok(updatedFine);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+        FineEntity updatedFine = fineService.updateFine(id, description, dueDate);
+        return ResponseEntity.ok(updatedFine);
     }
 
     @DeleteMapping("/{id}")
-    public ResponseEntity<?> deleteFineById(@PathVariable Long id) {
-        try {
-            fineService.deleteFine(id);
-            return ResponseEntity.noContent().build();
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+    public ResponseEntity<Void> deleteFineById(@PathVariable Long id) {
+        fineService.deleteFine(id);
+        return ResponseEntity.noContent().build();
     }
 
     // Endpoints específicos del negocio
     @PutMapping("/{id}/pay")
-    public ResponseEntity<?> payFine(@PathVariable Long id) {
-        try {
-            FineEntity paidFine = fineService.payFine(id);
-            return ResponseEntity.ok(paidFine);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+    public ResponseEntity<FineEntity> payFine(@PathVariable Long id) {
+        FineEntity paidFine = fineService.payFine(id);
+        return ResponseEntity.ok(paidFine);
     }
 
     @PutMapping("/{id}/cancel")
-    public ResponseEntity<?> cancelFine(@PathVariable Long id) {
-        try {
-            fineService.cancelFine(id);
-            return ResponseEntity.ok("Fine cancelled successfully");
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+    public ResponseEntity<String> cancelFine(@PathVariable Long id) {
+        fineService.cancelFine(id);
+        return ResponseEntity.ok("Fine cancelled successfully");
     }
 
     @GetMapping("/client/{clientId}")
-    public ResponseEntity<?> getFinesByClient(@PathVariable Long clientId) {
-        try {
-            ClientEntity client = clientService.getClientById(clientId);
-            if (client == null) {
-                return ResponseEntity.notFound().build();
-            }
-            List<FineEntity> fines = fineService.getFinesByClient(client);
-            return ResponseEntity.ok(fines);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+    public ResponseEntity<List<FineEntity>> getFinesByClient(@PathVariable Long clientId) {
+        ClientEntity client = clientService.getClientById(clientId);
+        List<FineEntity> fines = fineService.getFinesByClient(client);
+        return ResponseEntity.ok(fines);
     }
 
     @GetMapping("/client/{clientId}/unpaid")
-    public ResponseEntity<?> getUnpaidFinesByClient(@PathVariable Long clientId) {
-        try {
-            ClientEntity client = clientService.getClientById(clientId);
-            if (client == null) {
-                return ResponseEntity.notFound().build();
-            }
-            List<FineEntity> unpaidFines = fineService.getUnpaidFinesByClient(client);
-            return ResponseEntity.ok(unpaidFines);
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+    public ResponseEntity<List<FineEntity>> getUnpaidFinesByClient(@PathVariable Long clientId) {
+        ClientEntity client = clientService.getClientById(clientId);
+        List<FineEntity> unpaidFines = fineService.getUnpaidFinesByClient(client);
+        return ResponseEntity.ok(unpaidFines);
     }
 
     @GetMapping("/client/{clientId}/total-unpaid")
-    public ResponseEntity<?> getTotalUnpaidAmount(@PathVariable Long clientId) {
-        try {
-            ClientEntity client = clientService.getClientById(clientId);
-            if (client == null) {
-                return ResponseEntity.notFound().build();
-            }
-            BigDecimal totalUnpaid = fineService.getTotalUnpaidAmount(client);
-            return ResponseEntity.ok(Map.of("totalUnpaid", totalUnpaid));
-        } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
-        }
+    public ResponseEntity<Map<String, BigDecimal>> getTotalUnpaidAmount(@PathVariable Long clientId) {
+        ClientEntity client = clientService.getClientById(clientId);
+        BigDecimal totalUnpaid = fineService.getTotalUnpaidAmount(client);
+        return ResponseEntity.ok(Map.of("totalUnpaid", totalUnpaid));
     }
 
     @GetMapping("/unpaid")

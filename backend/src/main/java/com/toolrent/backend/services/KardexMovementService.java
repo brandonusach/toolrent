@@ -133,6 +133,12 @@ public class KardexMovementService {
         return kardexMovementRepository.save(movement);
     }
 
+    @Transactional
+    public void deleteMovementsByLoan(Long loanId) {
+        List<KardexMovementEntity> movements = getMovementsByLoanId(loanId);
+        kardexMovementRepository.deleteAll(movements);
+    }
+
     // RF5.1: Create decommission movement with instance tracking
     @Transactional
     public KardexMovementEntity createDecommissionMovement(ToolEntity tool, Integer quantity,
