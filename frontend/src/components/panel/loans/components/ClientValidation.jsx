@@ -1,4 +1,4 @@
-// loans/components/ClientValidation.jsx - Validar eligibilidad del cliente
+// loans/components/ClientValidation.jsx - Validar elegibilidad del cliente
 import React, { useState, useEffect } from 'react';
 import {
     User,
@@ -16,8 +16,9 @@ import { useLoans } from '../hooks/useLoans';
 import { useFines } from '../hooks/useFines';
 
 const ClientValidation = ({ clientId, onValidationChange }) => {
-    const { checkClientRestrictions } = useLoans();
-    const { checkClientRestrictions: checkFineRestrictions } = useFines();
+    // Usar solo las funciones que existen en los hooks
+    const { getLoansByClient } = useLoans();
+    const { getFinesByClient, getTotalUnpaidAmount } = useFines();
 
     const [validation, setValidation] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -38,11 +39,36 @@ const ClientValidation = ({ clientId, onValidationChange }) => {
         setLoading(true);
         setError('');
         try {
-            // Obtener restricciones de préstamos
-            const loanRestrictions = await checkClientRestrictions(clientId);
+            // Obtener préstamos del cliente
+            const clientLoans = await getLoansByClient(clientId);
+            const activeLoans = clientLoans.filter(loan => loan.status === 'ACTIVE');
 
-            // Obtener restricciones de multas
-            const fineRestrictions = await checkFineRestrictions(clientId);
+            // Obtener multas del cliente
+            const clientFines = await getFinesByClient(clientId);
+            const unpaidFines = clientFines.filter(fine => !fine.paid);
+            const totalUnpaidAmount = await getTotalUnpaidAmount(clientId);
+
+            // Calcular restricciones de préstamos
+            const loanRestrictions = {
+                eligible: activeLoans.length < 5, // Límite de 5 préstamos activos
+                currentActiveLoans: activeLoans.length,
+                remainingLoanSlots: Math.max(0, 5 - activeLoans.length)
+            };
+
+            // Calcular restricciones de multas
+            const fineRestrictions = {
+                canRequestLoan: unpaidFines.length === 0,
+                hasUnpaidFines: unpaidFines.length > 0,
+                unpaidFinesCount: unpaidFines.length,
+                totalUnpaidAmount: totalUnpaidAmount,
+                isRestricted: unpaidFines.length > 0,
+                restrictionReason: unpaidFines.length > 0 ? 'Cliente tiene multas pendientes' : null,
+                clientStatus: unpaidFines.length > 0 ? 'RESTRICTED' : 'ACTIVE',
+                unpaidFines: unpaidFines,
+                overdueFinesCount: unpaidFines.filter(fine =>
+                    fine.dueDate && new Date(fine.dueDate) < new Date()
+                ).length
+            };
 
             // Combinar información
             const combinedValidation = {

@@ -18,7 +18,6 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
     const [tools, setTools] = useState([]);
     const [toolAvailability, setToolAvailability] = useState(null);
     const [clientValidation, setClientValidation] = useState(null);
-    const [comprehensiveValidation, setComprehensiveValidation] = useState(null);
     const [loading, setLoading] = useState(false);
     const [validating, setValidating] = useState(false);
     const [error, setError] = useState('');
@@ -33,45 +32,63 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
     useEffect(() => {
         if (formData.clientId && formData.toolId && formData.quantity) {
             validateComprehensive();
-        } else {
-            setComprehensiveValidation(null);
         }
     }, [formData.clientId, formData.toolId, formData.quantity]);
 
     const loadClients = async () => {
         try {
             const response = await httpClient.get('/api/v1/clients/');
+            console.log('Clients loaded:', response.data); // Debug
             const activeClients = response.data.filter(client => client.status === 'ACTIVE');
             setClients(activeClients);
         } catch (err) {
             console.error('Error loading clients:', err);
+            setError('Error al cargar los clientes');
         }
     };
 
     const loadTools = async () => {
         try {
             const response = await httpClient.get('/api/v1/tools/');
+            console.log('Tools loaded:', response.data); // Debug
             const availableTools = response.data.filter(tool =>
                 tool.status === 'AVAILABLE' && tool.currentStock > 0
             );
             setTools(availableTools);
         } catch (err) {
             console.error('Error loading tools:', err);
+            setError('Error al cargar las herramientas');
         }
     };
 
     const validateComprehensive = async () => {
         setValidating(true);
         try {
+            // Verificar si el endpoint existe, si no, hacer validación manual
             const response = await httpClient.post('/api/v1/loans/validate-comprehensive', {
                 clientId: parseInt(formData.clientId),
                 toolId: parseInt(formData.toolId),
                 quantity: parseInt(formData.quantity)
+            }).catch(() => {
+                // Si falla, usar validación basada en los componentes individuales
+                return {
+                    data: {
+                        canCreateLoan: Boolean(
+                            clientValidation?.eligible &&
+                            toolAvailability?.finallyAvailable
+                        ),
+                        clientEligible: clientValidation?.eligible || false,
+                        toolAvailable: toolAvailability?.available || false,
+                        hasExistingLoanForTool: toolAvailability?.clientCheck?.hasActiveLoanForTool || false,
+                        clientIssue: clientValidation?.eligible ? null : 'Cliente no elegible',
+                        toolIssue: toolAvailability?.available ? null : 'Herramienta no disponible'
+                    }
+                };
             });
-            setComprehensiveValidation(response.data);
+
+            // No necesitamos setComprehensiveValidation ya que usamos los componentes individuales
         } catch (err) {
             console.error('Error validating loan:', err);
-            setComprehensiveValidation(null);
         } finally {
             setValidating(false);
         }
@@ -97,8 +114,45 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
 
-        if (!comprehensiveValidation?.canCreateLoan) {
-            setError('No se puede crear el préstamo. Revisa las validaciones.');
+        // Validación más detallada
+        if (!formData.clientId) {
+            setError('Por favor selecciona un cliente');
+            return;
+        }
+
+        if (!formData.toolId) {
+            setError('Por favor selecciona una herramienta');
+            return;
+        }
+
+        if (!formData.agreedReturnDate) {
+            setError('Por favor selecciona la fecha de devolución');
+            return;
+        }
+
+        if (!formData.quantity || formData.quantity < 1) {
+            setError('La cantidad debe ser mayor a 0');
+            return;
+        }
+
+        // Validar usando los datos disponibles
+        const clientEligible = clientValidation?.eligible !== false;
+        const toolAvailable = toolAvailability?.finallyAvailable !== false;
+        const canCreate = Boolean(clientEligible && toolAvailable);
+
+        console.log('Validation check:', {
+            clientEligible,
+            toolAvailable,
+            canCreate,
+            clientValidation,
+            toolAvailability
+        });
+
+        if (!canCreate) {
+            let errorMsg = 'No se puede crear el préstamo: ';
+            if (!clientEligible) errorMsg += 'Cliente no elegible. ';
+            if (!toolAvailable) errorMsg += 'Herramienta no disponible. ';
+            setError(errorMsg);
             return;
         }
 
@@ -106,19 +160,46 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
         setError('');
 
         try {
+            // Preparar datos con validación robusta
             const loanData = {
-                clientId: parseInt(formData.clientId),
-                toolId: parseInt(formData.toolId),
-                quantity: parseInt(formData.quantity),
+                clientId: Number(formData.clientId),
+                toolId: Number(formData.toolId),
+                quantity: Number(formData.quantity),
                 agreedReturnDate: formData.agreedReturnDate,
-                notes: formData.notes.trim()
+                notes: (formData.notes || '').trim()
             };
 
-            await onSubmit(loanData);
+            // Validar que los números sean válidos
+            if (isNaN(loanData.clientId) || loanData.clientId <= 0) {
+                throw new Error('ID de cliente inválido');
+            }
+            if (isNaN(loanData.toolId) || loanData.toolId <= 0) {
+                throw new Error('ID de herramienta inválido');
+            }
+            if (isNaN(loanData.quantity) || loanData.quantity <= 0) {
+                throw new Error('Cantidad inválida');
+            }
+
+            // Validar fecha
+            const today = new Date();
+            const returnDate = new Date(loanData.agreedReturnDate);
+            if (returnDate <= today) {
+                throw new Error('La fecha de devolución debe ser posterior a hoy');
+            }
+
+            console.log('Sending loan data:', loanData); // Debug
+
+            const result = await onSubmit(loanData);
+            console.log('Loan creation result:', result); // Debug
+
             onSuccess();
         } catch (err) {
             console.error('Error creating loan:', err);
-            setError(err.message || 'Error al crear el préstamo');
+            const errorMsg = err.response?.data?.message ||
+                err.response?.data ||
+                err.message ||
+                'Error al crear el préstamo';
+            setError(errorMsg);
         } finally {
             setLoading(false);
         }
@@ -133,6 +214,23 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
 
     const selectedClient = clients.find(c => c.id === parseInt(formData.clientId));
     const selectedTool = tools.find(t => t.id === parseInt(formData.toolId));
+
+    // Determinar fecha mínima (mañana)
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const minDate = tomorrow.toISOString().split('T')[0];
+
+    // Determinar fecha máxima (30 días desde hoy)
+    const maxDate = new Date();
+    maxDate.setDate(maxDate.getDate() + 30);
+    const maxDateStr = maxDate.toISOString().split('T')[0];
+
+    // Helper function to safely render values
+    const safeRender = (value, fallback = 'N/A') => {
+        if (value === null || value === undefined) return fallback;
+        if (typeof value === 'object') return JSON.stringify(value);
+        return String(value);
+    };
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
@@ -168,13 +266,13 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
                                     <option value="">Seleccionar cliente...</option>
                                     {clients.map(client => (
                                         <option key={client.id} value={client.id}>
-                                            {client.name} - {client.email}
+                                            {safeRender(client.name)} - {safeRender(client.email)}
                                         </option>
                                     ))}
                                 </select>
                                 {selectedClient && (
                                     <p className="text-sm text-gray-400 mt-1">
-                                        Estado: {selectedClient.status} | Teléfono: {selectedClient.phone || 'N/A'}
+                                        Estado: {safeRender(selectedClient.status)} | Teléfono: {safeRender(selectedClient.phone)}
                                     </p>
                                 )}
                             </div>
@@ -195,13 +293,13 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
                                     <option value="">Seleccionar herramienta...</option>
                                     {tools.map(tool => (
                                         <option key={tool.id} value={tool.id}>
-                                            {tool.name} - Stock: {tool.currentStock} - ${tool.replacementValue}
+                                            {safeRender(tool.name)} - Stock: {safeRender(tool.currentStock)} - ${safeRender(tool.replacementValue)}
                                         </option>
                                     ))}
                                 </select>
                                 {selectedTool && (
                                     <p className="text-sm text-gray-400 mt-1">
-                                        Categoría: {selectedTool.category} | Estado: {selectedTool.status}
+                                        Categoría: {safeRender(selectedTool.category?.name)} | Estado: {safeRender(selectedTool.status)}
                                     </p>
                                 )}
                             </div>
@@ -223,7 +321,7 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
                                 />
                                 {selectedTool && (
                                     <p className="text-sm text-gray-400 mt-1">
-                                        Máximo disponible: {selectedTool.currentStock}
+                                        Máximo disponible: {safeRender(selectedTool.currentStock)}
                                     </p>
                                 )}
                             </div>
@@ -239,10 +337,14 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
                                     name="agreedReturnDate"
                                     value={formData.agreedReturnDate}
                                     onChange={handleInputChange}
-                                    min={new Date().toISOString().split('T')[0]}
+                                    min={minDate}
+                                    max={maxDateStr}
                                     required
                                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
                                 />
+                                <p className="text-xs text-gray-400 mt-1">
+                                    Debe ser entre mañana y {maxDate.toLocaleDateString('es-ES')}
+                                </p>
                             </div>
 
                             {/* Notas */}
@@ -284,71 +386,64 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
                         </div>
                     </div>
 
-                    {/* Validación comprensiva */}
-                    {comprehensiveValidation && (
+                    {/* Validación comprensiva simplificada */}
+                    {(clientValidation || toolAvailability) && (
                         <div className="bg-gray-700 rounded-lg p-4 border border-gray-600">
                             <h3 className="text-sm font-medium text-white mb-3">Resumen de Validación</h3>
                             <div className="space-y-2">
                                 <div className="flex items-center">
-                                    {getValidationIcon(comprehensiveValidation.clientEligible)}
+                                    {getValidationIcon(clientValidation?.eligible)}
                                     <span className={`ml-2 text-sm ${
-                                        comprehensiveValidation.clientEligible ? 'text-green-400' : 'text-red-400'
+                                        clientValidation?.eligible ? 'text-green-400' : 'text-red-400'
                                     }`}>
                                         Cliente elegible
                                     </span>
-                                    {comprehensiveValidation.clientIssue && (
+                                    {clientValidation && !clientValidation.eligible && (
                                         <span className="ml-2 text-xs text-gray-400">
-                                            - {comprehensiveValidation.clientIssue}
+                                            - Revisar restricciones
                                         </span>
                                     )}
                                 </div>
 
                                 <div className="flex items-center">
-                                    {getValidationIcon(comprehensiveValidation.toolAvailable)}
+                                    {getValidationIcon(toolAvailability?.available)}
                                     <span className={`ml-2 text-sm ${
-                                        comprehensiveValidation.toolAvailable ? 'text-green-400' : 'text-red-400'
+                                        toolAvailability?.available ? 'text-green-400' : 'text-red-400'
                                     }`}>
                                         Herramienta disponible
                                     </span>
-                                    {comprehensiveValidation.toolIssue && (
+                                    {toolAvailability?.issue && (
                                         <span className="ml-2 text-xs text-gray-400">
-                                            - {comprehensiveValidation.toolIssue}
+                                            - {toolAvailability.issue}
                                         </span>
                                     )}
                                 </div>
 
                                 <div className="flex items-center">
-                                    {getValidationIcon(!comprehensiveValidation.hasExistingLoanForTool)}
+                                    {getValidationIcon(!toolAvailability?.clientCheck?.hasActiveLoanForTool)}
                                     <span className={`ml-2 text-sm ${
-                                        !comprehensiveValidation.hasExistingLoanForTool ? 'text-green-400' : 'text-red-400'
+                                        !toolAvailability?.clientCheck?.hasActiveLoanForTool ? 'text-green-400' : 'text-red-400'
                                     }`}>
                                         Sin préstamo existente de esta herramienta
                                     </span>
                                 </div>
 
-                                {comprehensiveValidation.currentDailyRate && (
-                                    <div className="text-sm text-gray-300 mt-3 p-3 bg-gray-600 rounded">
-                                        <strong>Tarifa diaria:</strong> ${comprehensiveValidation.currentDailyRate} |{' '}
-                                        <strong>Multa por atraso:</strong> ${comprehensiveValidation.currentLateFeeRate}/día
-                                    </div>
-                                )}
-
                                 {/* Estado final */}
                                 <div className={`mt-4 p-3 rounded-lg border ${
-                                    comprehensiveValidation.canCreateLoan
+                                    (clientValidation?.eligible && toolAvailability?.finallyAvailable)
                                         ? 'bg-green-900 border-green-700'
                                         : 'bg-red-900 border-red-700'
                                 }`}>
                                     <div className="flex items-center">
-                                        {comprehensiveValidation.canCreateLoan ? (
+                                        {(clientValidation?.eligible && toolAvailability?.finallyAvailable) ? (
                                             <CheckCircle className="h-5 w-5 text-green-400 mr-2" />
                                         ) : (
                                             <AlertCircle className="h-5 w-5 text-red-400 mr-2" />
                                         )}
                                         <span className={`font-medium ${
-                                            comprehensiveValidation.canCreateLoan ? 'text-green-200' : 'text-red-200'
+                                            (clientValidation?.eligible && toolAvailability?.finallyAvailable) ? 'text-green-200' : 'text-red-200'
                                         }`}>
-                                            {comprehensiveValidation.canCreateLoan
+                                            {(clientValidation?.eligible && toolAvailability?.finallyAvailable)
                                                 ? 'Préstamo puede ser creado'
                                                 : 'No se puede crear el préstamo'
                                             }
@@ -369,6 +464,17 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
                         </div>
                     )}
 
+                    {/* Debug info */}
+                    {process.env.NODE_ENV === 'development' && (
+                        <div className="bg-blue-900 border border-blue-700 rounded-md p-3 text-xs">
+                            <p className="text-blue-200">Debug Info:</p>
+                            <p className="text-blue-300">Clients: {clients.length}</p>
+                            <p className="text-blue-300">Tools: {tools.length}</p>
+                            <p className="text-blue-300">Selected Client: {formData.clientId}</p>
+                            <p className="text-blue-300">Selected Tool: {formData.toolId}</p>
+                        </div>
+                    )}
+
                     {/* Buttons */}
                     <div className="flex justify-end space-x-3 pt-4 border-t border-gray-700">
                         <button
@@ -380,7 +486,7 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
                         </button>
                         <button
                             type="submit"
-                            disabled={loading || !comprehensiveValidation?.canCreateLoan || validating}
+                            disabled={loading || !(clientValidation?.eligible && toolAvailability?.finallyAvailable) || validating}
                             className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
                         >
                             {loading && <Loader className="h-4 w-4 mr-2 animate-spin" />}

@@ -73,6 +73,17 @@ export const useFines = () => {
         }
     }, []);
 
+    // Check client restrictions - NUEVA FUNCIÓN FALTANTE
+    const checkClientRestrictions = useCallback(async (clientId) => {
+        try {
+            const response = await httpClient.post(`/api/v1/fines/${clientId}/check-restrictions`);
+            return response.data;
+        } catch (err) {
+            console.error('Error checking client restrictions:', err);
+            throw new Error(err.response?.data || err.message || 'Error al verificar restricciones del cliente');
+        }
+    }, []);
+
     // Create fine
     const createFine = useCallback(async (fineData) => {
         try {
@@ -232,6 +243,7 @@ export const useFines = () => {
         getFinesByClient,
         getUnpaidFinesByClient,
         getTotalUnpaidAmount,
+        checkClientRestrictions, // AGREGADA
         getOverdueFines,
         getFinesByType,
         getFineStatistics,

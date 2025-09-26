@@ -8,9 +8,11 @@ import com.toolrent.backend.services.ClientService;
 import com.toolrent.backend.services.ToolService;
 import com.toolrent.backend.services.RateService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -45,24 +47,100 @@ public class LoanController {
 
     @PostMapping("/")
     public ResponseEntity<LoanEntity> createLoan(@RequestBody Map<String, Object> request) {
-        Long clientId = Long.valueOf(request.get("clientId").toString());
-        Long toolId = Long.valueOf(request.get("toolId").toString());
-        Integer quantity = Integer.valueOf(request.get("quantity").toString());
-        String returnDate = request.get("agreedReturnDate").toString();
-        String notes = request.get("notes") != null ? request.get("notes").toString() : "";
+        try {
+            // Validar que los datos requeridos estén presentes
+            if (!request.containsKey("clientId") || !request.containsKey("toolId") ||
+                    !request.containsKey("quantity") || !request.containsKey("agreedReturnDate")) {
+                throw new RuntimeException("Datos requeridos faltantes: clientId, toolId, quantity, agreedReturnDate");
+            }
 
-        ClientEntity client = clientService.getClientById(clientId);
-        ToolEntity tool = toolService.getToolById(toolId).orElse(null);
+            // Manejo robusto de tipos
+            Object clientIdObj = request.get("clientId");
+            Object toolIdObj = request.get("toolId");
+            Object quantityObj = request.get("quantity");
 
-        LoanEntity loan = new LoanEntity();
-        loan.setClient(client);
-        loan.setTool(tool);
-        loan.setQuantity(quantity);
-        loan.setAgreedReturnDate(java.time.LocalDate.parse(returnDate));
-        loan.setNotes(notes);
+            Long clientId;
+            Long toolId;
+            Integer quantity;
 
-        LoanEntity createdLoan = loanService.createLoan(loan);
-        return ResponseEntity.ok(createdLoan);
+            try {
+                clientId = clientIdObj instanceof Number ?
+                        ((Number) clientIdObj).longValue() :
+                        Long.valueOf(clientIdObj.toString());
+
+                toolId = toolIdObj instanceof Number ?
+                        ((Number) toolIdObj).longValue() :
+                        Long.valueOf(toolIdObj.toString());
+
+                quantity = quantityObj instanceof Number ?
+                        ((Number) quantityObj).intValue() :
+                        Integer.valueOf(quantityObj.toString());
+            } catch (NumberFormatException e) {
+                throw new RuntimeException("Error en formato de números: " + e.getMessage());
+            }
+
+            // Validar valores
+            if (clientId <= 0 || toolId <= 0 || quantity <= 0) {
+                throw new RuntimeException("Los valores deben ser mayores a 0");
+            }
+
+            String returnDate = request.get("agreedReturnDate").toString();
+            String notes = request.get("notes") != null ? request.get("notes").toString() : "";
+
+            // Validar fecha
+            try {
+                java.time.LocalDate.parse(returnDate);
+            } catch (Exception e) {
+                throw new RuntimeException("Formato de fecha inválido: " + returnDate);
+            }
+
+            // Obtener entidades
+            ClientEntity client;
+            ToolEntity tool;
+
+            try {
+                client = clientService.getClientById(clientId);
+                if (client == null) {
+                    throw new RuntimeException("Cliente no encontrado con ID: " + clientId);
+                }
+            } catch (Exception e) {
+                throw new RuntimeException("Error al obtener cliente: " + e.getMessage());
+            }
+
+            try {
+                tool = toolService.getToolById(toolId).orElse(null);
+                if (tool == null) {
+                    throw new RuntimeException("Herramienta no encontrada con ID: " + toolId);
+                }
+            } catch (Exception e) {
+                throw new RuntimeException("Error al obtener herramienta: " + e.getMessage());
+            }
+
+            // Crear préstamo
+            LoanEntity loan = new LoanEntity();
+            loan.setClient(client);
+            loan.setTool(tool);
+            loan.setQuantity(quantity);
+            loan.setAgreedReturnDate(java.time.LocalDate.parse(returnDate));
+            loan.setNotes(notes.trim());
+
+            LoanEntity createdLoan = loanService.createLoan(loan);
+            return ResponseEntity.ok(createdLoan);
+
+        } catch (Exception e) {
+            // Log detallado del error
+            System.err.println("Error creating loan: " + e.getMessage());
+            e.printStackTrace();
+
+            // Respuesta de error estructurada
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", true);
+            errorResponse.put("message", e.getMessage());
+            errorResponse.put("timestamp", java.time.LocalDateTime.now());
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(null); // O crear una entidad de error específica
+        }
     }
 
     // Patrón del profesor - PUT sin ID en la URL
