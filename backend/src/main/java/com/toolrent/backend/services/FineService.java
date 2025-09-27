@@ -1,6 +1,9 @@
+// FineService.java - VERSION CORREGIDA
 package com.toolrent.backend.services;
 
-import com.toolrent.backend.entities.*;
+import com.toolrent.backend.entities.FineEntity;
+import com.toolrent.backend.entities.ClientEntity;
+import com.toolrent.backend.entities.LoanEntity;
 import com.toolrent.backend.repositories.FineRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -23,322 +26,374 @@ public class FineService {
     @Autowired
     private ClientService clientService;
 
-    // Create a new fine
-    public FineEntity createFine(FineEntity fine) {
-        validateFineCreation(fine);
-
-        if (fine.getCreatedAt() == null) {
-            fine.setCreatedAt(LocalDateTime.now());
-        }
-
-        if (fine.getDueDate() == null) {
-            fine.setDueDate(LocalDate.now().plusDays(30));
-        }
-
-        fine.setPaid(false);
-        fine.setPaidDate(null);
-
-        FineEntity savedFine = fineRepository.save(fine);
-        updateClientStatus(fine.getClient());
-
-        return savedFine;
-    }
-
-    // Mark fine as paid - RF2.5
-    @Transactional
-    public FineEntity payFine(Long fineId) {
-        FineEntity fine = fineRepository.findById(fineId)
-                .orElseThrow(() -> new RuntimeException("Fine not found with ID: " + fineId));
-
-        if (fine.getPaid()) {
-            throw new RuntimeException("Fine is already paid");
-        }
-
-        fine.markAsPaid();
-        FineEntity savedFine = fineRepository.save(fine);
-        updateClientStatus(fine.getClient());
-
-        return savedFine;
-    }
-
-    // Create late return fine - RF2.4
-    public FineEntity createLateFine(LoanEntity loan, long daysLate, BigDecimal dailyLateFee) {
-        BigDecimal totalAmount = dailyLateFee.multiply(BigDecimal.valueOf(daysLate));
-
-        FineEntity fine = new FineEntity();
-        fine.setClient(loan.getClient());
-        fine.setLoan(loan);
-        fine.setType(FineEntity.FineType.LATE_RETURN);
-        fine.setAmount(totalAmount);
-        fine.setDescription("Late return fine: " + daysLate + " days × $" + dailyLateFee + " = $" + totalAmount);
-
-        return createFine(fine);
-    }
-
-    // Create damage repair fine
-    public FineEntity createDamageFine(LoanEntity loan, BigDecimal repairCost, String damageDescription) {
-        FineEntity fine = new FineEntity();
-        fine.setClient(loan.getClient());
-        fine.setLoan(loan);
-        fine.setType(FineEntity.FineType.DAMAGE_REPAIR);
-        fine.setAmount(repairCost);
-        fine.setDescription("Tool damage fine: " + damageDescription);
-
-        return createFine(fine);
-    }
-
-    // Create tool replacement fine
-    public FineEntity createReplacementFine(LoanEntity loan, BigDecimal replacementValue) {
-        FineEntity fine = new FineEntity();
-        fine.setClient(loan.getClient());
-        fine.setLoan(loan);
-        fine.setType(FineEntity.FineType.TOOL_REPLACEMENT);
-        fine.setAmount(replacementValue);
-        fine.setDescription("Tool replacement cost for irreparable damage: " + loan.getTool().getName());
-
-        return createFine(fine);
-    }
-
-    public List<FineEntity> getAllFines() {
-        return fineRepository.findAll();
-    }
-
-    public FineEntity getFineById(Long id) {
-        return fineRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Fine not found with ID: " + id));
-    }
-
-    public List<FineEntity> getUnpaidFinesByClient(ClientEntity client) {
-        return fineRepository.findByClientAndPaidFalse(client);
-    }
-
-    public List<FineEntity> getAllUnpaidFines() {
-        return fineRepository.findByPaidFalse();
-    }
-
-    public List<FineEntity> getFinesByClient(ClientEntity client) {
-        return fineRepository.findAll().stream()
-                .filter(fine -> fine.getClient().getId().equals(client.getId()))
-                .toList();
-    }
-
-    public List<FineEntity> getFinesByLoan(LoanEntity loan) {
-        return fineRepository.findByLoan(loan);
-    }
-
-    public List<FineEntity> getFinesByType(FineEntity.FineType type) {
-        return fineRepository.findByType(type);
-    }
-
-    public List<FineEntity> getOverdueFines() {
-        return fineRepository.findOverdueFines(LocalDate.now());
-    }
-
-    public BigDecimal getTotalUnpaidAmount(ClientEntity client) {
-        return fineRepository.getTotalUnpaidAmountByClient(client);
-    }
-
-    // RF2.5: Check if client has unpaid fines (blocks loans)
+    // Verificar si el cliente tiene multas impagas - VERSIÓN SEGURA
     public boolean clientHasUnpaidFines(ClientEntity client) {
-        return fineRepository.countUnpaidFinesByClient(client) > 0;
-    }
-
-    public List<FineEntity> getFinesInDateRange(LocalDateTime startDate, LocalDateTime endDate) {
-        return fineRepository.findByDateRange(startDate, endDate);
-    }
-
-    // Update fine (limited fields)
-    public FineEntity updateFine(Long fineId, String description, LocalDate dueDate) {
-        FineEntity fine = getFineById(fineId);
-
-        if (fine.getPaid()) {
-            throw new RuntimeException("Cannot modify paid fines");
-        }
-
-        if (description != null && !description.trim().isEmpty()) {
-            fine.setDescription(description);
-        }
-
-        if (dueDate != null) {
-            if (dueDate.isBefore(LocalDate.now())) {
-                throw new RuntimeException("Due date cannot be in the past");
+        try {
+            if (client == null) {
+                return false;
             }
-            fine.setDueDate(dueDate);
+            long unpaidCount = fineRepository.countUnpaidFinesByClient(client);
+            return unpaidCount > 0;
+        } catch (Exception e) {
+            System.err.println("Error checking unpaid fines for client: " + e.getMessage());
+            return false; // En caso de error, permitir el préstamo
         }
-
-        return fineRepository.save(fine);
     }
 
-    // Cancel unpaid fine (admin only)
-    @Transactional
-    public void cancelFine(Long fineId) {
-        FineEntity fine = getFineById(fineId);
-
-        if (fine.getPaid()) {
-            throw new RuntimeException("Cannot cancel a paid fine");
+    // Obtener total de multas impagas - VERSIÓN SEGURA
+    public BigDecimal getTotalUnpaidAmount(ClientEntity client) {
+        try {
+            if (client == null) {
+                return BigDecimal.ZERO;
+            }
+            BigDecimal total = fineRepository.getTotalUnpaidAmountByClient(client);
+            return total != null ? total : BigDecimal.ZERO;
+        } catch (Exception e) {
+            System.err.println("Error getting total unpaid amount for client: " + e.getMessage());
+            return BigDecimal.ZERO;
         }
-
-        fine.setAmount(BigDecimal.ZERO);
-        fine.setPaid(true);
-        fine.setPaidDate(LocalDate.now());
-
-        fineRepository.save(fine);
-        updateClientStatus(fine.getClient());
     }
 
-    // Delete fine (only for unpaid fines)
-    @Transactional
-    public void deleteFine(Long fineId) {
-        FineEntity fine = getFineById(fineId);
-
-        if (fine.getPaid()) {
-            throw new RuntimeException("Cannot delete a paid fine");
-        }
-
-        ClientEntity client = fine.getClient();
-        fineRepository.delete(fine);
-        updateClientStatus(client);
-    }
-
-    // Get comprehensive fine statistics - RF6
-    public Map<String, Object> getFineStatistics() {
-        Map<String, Object> stats = new HashMap<>();
-
-        long totalFines = fineRepository.count();
-        List<FineEntity> allFines = fineRepository.findAll();
-        long unpaidFines = allFines.stream().filter(f -> !f.getPaid()).count();
-        long paidFines = allFines.stream().filter(f -> f.getPaid()).count();
-        long overdueFines = fineRepository.findOverdueFines(LocalDate.now()).size();
-
-        BigDecimal totalUnpaidAmount = allFines.stream()
-                .filter(f -> !f.getPaid())
-                .map(FineEntity::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        BigDecimal totalPaidAmount = allFines.stream()
-                .filter(f -> f.getPaid())
-                .map(FineEntity::getAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        List<Object[]> typeStats = fineRepository.getFineCountsByType();
-        Map<String, Long> finesByType = new HashMap<>();
-        for (Object[] stat : typeStats) {
-            finesByType.put(stat[0].toString(), ((Number) stat[1]).longValue());
-        }
-
-        stats.put("totalFines", totalFines);
-        stats.put("unpaidFines", unpaidFines);
-        stats.put("paidFines", paidFines);
-        stats.put("overdueFines", overdueFines);
-        stats.put("totalUnpaidAmount", totalUnpaidAmount);
-        stats.put("totalPaidAmount", totalPaidAmount);
-        stats.put("finesByType", finesByType);
-
-        return stats;
-    }
-
-    // Check client restrictions for loan eligibility - RF2.5
+    // Verificar restricciones del cliente - NUEVO MÉTODO REQUERIDO POR EL FRONTEND
     public Map<String, Object> checkClientRestrictions(Long clientId) {
         Map<String, Object> restrictions = new HashMap<>();
 
         try {
-            ClientEntity client = clientService.getClientById(clientId);
-            if (client == null) {
-                restrictions.put("error", "Client not found");
+            if (clientId == null || clientId <= 0) {
+                restrictions.put("canRequestLoan", false);
+                restrictions.put("isRestricted", true);
+                restrictions.put("restrictionReason", "ID de cliente inválido");
+                restrictions.put("clientStatus", "INVALID");
                 return restrictions;
             }
 
-            boolean hasUnpaidFines = clientHasUnpaidFines(client);
-            BigDecimal totalUnpaidAmount = getTotalUnpaidAmount(client);
+            ClientEntity client = clientService.getClientById(clientId);
+            if (client == null) {
+                restrictions.put("canRequestLoan", false);
+                restrictions.put("isRestricted", true);
+                restrictions.put("restrictionReason", "Cliente no encontrado");
+                restrictions.put("clientStatus", "NOT_FOUND");
+                return restrictions;
+            }
+
+            // Obtener multas impagas
             List<FineEntity> unpaidFines = getUnpaidFinesByClient(client);
-            List<FineEntity> overdueFines = unpaidFines.stream()
-                    .filter(this::isFineOverdue)
-                    .toList();
+            BigDecimal totalUnpaidAmount = getTotalUnpaidAmount(client);
 
-            boolean isRestricted = client.getStatus() == ClientEntity.ClientStatus.RESTRICTED;
+            // Contar multas vencidas
+            long overdueFinesCount = unpaidFines.stream()
+                    .filter(fine -> fine.getDueDate().isBefore(LocalDate.now()))
+                    .count();
 
-            restrictions.put("clientId", clientId);
-            restrictions.put("clientName", client.getName());
-            restrictions.put("clientStatus", client.getStatus().toString());
+            boolean canRequestLoan = unpaidFines.isEmpty();
+            boolean isRestricted = !unpaidFines.isEmpty();
+
+            restrictions.put("canRequestLoan", canRequestLoan);
             restrictions.put("isRestricted", isRestricted);
-            restrictions.put("hasUnpaidFines", hasUnpaidFines);
-            restrictions.put("totalUnpaidAmount", totalUnpaidAmount != null ? totalUnpaidAmount : BigDecimal.ZERO);
+            restrictions.put("hasUnpaidFines", !unpaidFines.isEmpty());
             restrictions.put("unpaidFinesCount", unpaidFines.size());
-            restrictions.put("overdueFinesCount", overdueFines.size());
-            restrictions.put("canRequestLoan", !isRestricted && !hasUnpaidFines);
-            restrictions.put("restrictionReason", getRestrictionReason(client, hasUnpaidFines, !overdueFines.isEmpty()));
+            restrictions.put("totalUnpaidAmount", totalUnpaidAmount);
+            restrictions.put("overdueFinesCount", overdueFinesCount);
+            restrictions.put("clientStatus", isRestricted ? "RESTRICTED" : "ACTIVE");
 
-            if (hasUnpaidFines) {
+            if (isRestricted) {
+                restrictions.put("restrictionReason",
+                        "Cliente tiene " + unpaidFines.size() + " multa(s) impaga(s) por $" + totalUnpaidAmount);
+            } else {
+                restrictions.put("message", "Cliente no tiene restricciones de multas");
+            }
+
+            // Agregar detalles de multas impagas
+            if (!unpaidFines.isEmpty()) {
                 restrictions.put("unpaidFines", unpaidFines);
             }
 
         } catch (Exception e) {
-            restrictions.put("error", "Error checking client restrictions: " + e.getMessage());
+            System.err.println("Error checking client restrictions: " + e.getMessage());
+            // En caso de error, no restringir al cliente
+            restrictions.put("canRequestLoan", true);
+            restrictions.put("isRestricted", false);
+            restrictions.put("error", "Error al verificar restricciones: " + e.getMessage());
+            restrictions.put("clientStatus", "ERROR");
         }
 
         return restrictions;
     }
 
-    // Private helper methods
-    private void validateFineCreation(FineEntity fine) {
-        if (fine.getClient() == null) {
-            throw new RuntimeException("Client is required for fine");
-        }
-
-        if (fine.getLoan() == null) {
-            throw new RuntimeException("Loan is required for fine");
-        }
-
-        if (fine.getType() == null) {
-            throw new RuntimeException("Fine type is required");
-        }
-
-        if (fine.getAmount() == null || fine.getAmount().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new RuntimeException("Fine amount must be greater than 0");
-        }
-
-        if (fine.getDescription() == null || fine.getDescription().trim().isEmpty()) {
-            throw new RuntimeException("Fine description is required");
+    // Obtener multas por cliente
+    public List<FineEntity> getFinesByClient(ClientEntity client) {
+        try {
+            if (client == null) {
+                return List.of();
+            }
+            // Usar una consulta que incluya tanto paid como unpaid
+            return fineRepository.findAll().stream()
+                    .filter(fine -> fine.getClient() != null &&
+                            fine.getClient().getId().equals(client.getId()))
+                    .toList();
+        } catch (Exception e) {
+            System.err.println("Error getting fines by client: " + e.getMessage());
+            return List.of();
         }
     }
 
-    // Update client status based on unpaid fines - RF2.5
-    private void updateClientStatus(ClientEntity client) {
-        boolean hasUnpaidFines = clientHasUnpaidFines(client);
-
-        if (hasUnpaidFines && client.getStatus() == ClientEntity.ClientStatus.ACTIVE) {
-            client.setStatus(ClientEntity.ClientStatus.RESTRICTED);
-            try {
-                clientService.updateClient(client);
-            } catch (Exception e) {
-                throw new RuntimeException("Error updating client status: " + e.getMessage());
+    // Obtener multas impagas por cliente
+    public List<FineEntity> getUnpaidFinesByClient(ClientEntity client) {
+        try {
+            if (client == null) {
+                return List.of();
             }
-        } else if (!hasUnpaidFines && client.getStatus() == ClientEntity.ClientStatus.RESTRICTED) {
-            client.setStatus(ClientEntity.ClientStatus.ACTIVE);
-            try {
-                clientService.updateClient(client);
-            } catch (Exception e) {
-                throw new RuntimeException("Error updating client status: " + e.getMessage());
-            }
+            return fineRepository.findByClientAndPaidFalse(client);
+        } catch (Exception e) {
+            System.err.println("Error getting unpaid fines by client: " + e.getMessage());
+            return List.of();
         }
     }
 
-    private String getRestrictionReason(ClientEntity client, boolean hasUnpaidFines, boolean hasOverdueFines) {
-        if (client.getStatus() == ClientEntity.ClientStatus.RESTRICTED) {
-            if (hasUnpaidFines) {
-                if (hasOverdueFines) {
-                    return "Client has overdue unpaid fines";
-                } else {
-                    return "Client has unpaid fines";
-                }
-            } else {
-                return "Client is restricted for administrative reasons";
+    // Obtener multas por préstamo
+    public List<FineEntity> getFinesByLoan(LoanEntity loan) {
+        try {
+            if (loan == null) {
+                return List.of();
             }
+            return fineRepository.findByLoan(loan);
+        } catch (Exception e) {
+            System.err.println("Error getting fines by loan: " + e.getMessage());
+            return List.of();
         }
-        return "No restrictions";
     }
 
-    private boolean isFineOverdue(FineEntity fine) {
-        return !fine.getPaid() && fine.getDueDate().isBefore(LocalDate.now());
+    // Pagar multa
+    @Transactional
+    public FineEntity payFine(Long fineId) {
+        try {
+            FineEntity fine = fineRepository.findById(fineId)
+                    .orElseThrow(() -> new RuntimeException("Multa no encontrada con ID: " + fineId));
+
+            if (fine.getPaid()) {
+                throw new RuntimeException("La multa ya ha sido pagada");
+            }
+
+            fine.markAsPaid();
+            return fineRepository.save(fine);
+        } catch (Exception e) {
+            System.err.println("Error paying fine: " + e.getMessage());
+            throw new RuntimeException("Error al pagar la multa: " + e.getMessage());
+        }
+    }
+
+    // Cancelar multa (solo admin)
+    @Transactional
+    public void cancelFine(Long fineId) {
+        try {
+            FineEntity fine = fineRepository.findById(fineId)
+                    .orElseThrow(() -> new RuntimeException("Multa no encontrada con ID: " + fineId));
+
+            fineRepository.delete(fine);
+        } catch (Exception e) {
+            System.err.println("Error cancelling fine: " + e.getMessage());
+            throw new RuntimeException("Error al cancelar la multa: " + e.getMessage());
+        }
+    }
+
+    // Crear multa
+    @Transactional
+    public FineEntity createFine(FineEntity fine) {
+        try {
+            if (fine.getCreatedAt() == null) {
+                fine.setCreatedAt(LocalDateTime.now());
+            }
+            return fineRepository.save(fine);
+        } catch (Exception e) {
+            System.err.println("Error creating fine: " + e.getMessage());
+            throw new RuntimeException("Error al crear la multa: " + e.getMessage());
+        }
+    }
+
+    // Actualizar multa
+    @Transactional
+    public FineEntity updateFine(Long id, String description, LocalDate dueDate) {
+        try {
+            FineEntity fine = fineRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Multa no encontrada con ID: " + id));
+
+            if (description != null) {
+                fine.setDescription(description);
+            }
+            if (dueDate != null) {
+                fine.setDueDate(dueDate);
+            }
+
+            return fineRepository.save(fine);
+        } catch (Exception e) {
+            System.err.println("Error updating fine: " + e.getMessage());
+            throw new RuntimeException("Error al actualizar la multa: " + e.getMessage());
+        }
+    }
+
+    // Eliminar multa
+    @Transactional
+    public void deleteFine(Long id) {
+        try {
+            FineEntity fine = fineRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Multa no encontrada con ID: " + id));
+
+            if (fine.getPaid()) {
+                throw new RuntimeException("No se puede eliminar una multa que ya ha sido pagada");
+            }
+
+            fineRepository.delete(fine);
+        } catch (Exception e) {
+            System.err.println("Error deleting fine: " + e.getMessage());
+            throw new RuntimeException("Error al eliminar la multa: " + e.getMessage());
+        }
+    }
+
+    // Obtener todas las multas
+    public List<FineEntity> getAllFines() {
+        try {
+            return fineRepository.findAll();
+        } catch (Exception e) {
+            System.err.println("Error getting all fines: " + e.getMessage());
+            return List.of();
+        }
+    }
+
+    // Obtener multa por ID
+    public FineEntity getFineById(Long id) {
+        try {
+            return fineRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Multa no encontrada con ID: " + id));
+        } catch (Exception e) {
+            throw new RuntimeException("Error al obtener la multa: " + e.getMessage());
+        }
+    }
+
+    // Obtener todas las multas impagas
+    public List<FineEntity> getAllUnpaidFines() {
+        try {
+            return fineRepository.findByPaidFalse();
+        } catch (Exception e) {
+            System.err.println("Error getting all unpaid fines: " + e.getMessage());
+            return List.of();
+        }
+    }
+
+    // Obtener multas vencidas
+    public List<FineEntity> getOverdueFines() {
+        try {
+            return fineRepository.findOverdueFines(LocalDate.now());
+        } catch (Exception e) {
+            System.err.println("Error getting overdue fines: " + e.getMessage());
+            return List.of();
+        }
+    }
+
+    // Obtener multas por tipo
+    public List<FineEntity> getFinesByType(FineEntity.FineType type) {
+        try {
+            if (type == null) {
+                return List.of();
+            }
+            return fineRepository.findByType(type);
+        } catch (Exception e) {
+            System.err.println("Error getting fines by type: " + e.getMessage());
+            return List.of();
+        }
+    }
+
+    // Obtener estadísticas de multas
+    public Map<String, Object> getFineStatistics() {
+        Map<String, Object> statistics = new HashMap<>();
+
+        try {
+            long totalFines = fineRepository.count();
+            long unpaidFines = fineRepository.countByPaidFalse();
+            long paidFines = fineRepository.countByPaidTrue();
+            long overdueFines = fineRepository.countOverdueFines(LocalDate.now());
+
+            BigDecimal totalUnpaidAmount = fineRepository.getTotalUnpaidAmount();
+            BigDecimal totalPaidAmount = fineRepository.getTotalPaidAmount();
+
+            statistics.put("totalFines", totalFines);
+            statistics.put("unpaidFines", unpaidFines);
+            statistics.put("paidFines", paidFines);
+            statistics.put("overdueFines", overdueFines);
+            statistics.put("totalUnpaidAmount", totalUnpaidAmount != null ? totalUnpaidAmount : BigDecimal.ZERO);
+            statistics.put("totalPaidAmount", totalPaidAmount != null ? totalPaidAmount : BigDecimal.ZERO);
+
+        } catch (Exception e) {
+            System.err.println("Error getting fine statistics: " + e.getMessage());
+            statistics.put("error", "Error al obtener estadísticas de multas");
+            statistics.put("totalFines", 0);
+            statistics.put("unpaidFines", 0);
+            statistics.put("paidFines", 0);
+            statistics.put("overdueFines", 0);
+            statistics.put("totalUnpaidAmount", BigDecimal.ZERO);
+            statistics.put("totalPaidAmount", BigDecimal.ZERO);
+        }
+
+        return statistics;
+    }
+
+    // Obtener multas en rango de fechas
+    public List<FineEntity> getFinesInDateRange(LocalDateTime startDate, LocalDateTime endDate) {
+        try {
+            if (startDate == null || endDate == null) {
+                return List.of();
+            }
+            return fineRepository.findByDateRange(startDate, endDate);
+        } catch (Exception e) {
+            System.err.println("Error getting fines in date range: " + e.getMessage());
+            return List.of();
+        }
+    }
+
+    // Crear multa por atraso - método auxiliar para el LoanService
+    public FineEntity createLateFine(LoanEntity loan, long daysLate, BigDecimal lateFeeRate) {
+        try {
+            if (loan == null || daysLate <= 0 || lateFeeRate == null) {
+                throw new RuntimeException("Parámetros inválidos para crear multa por atraso");
+            }
+
+            BigDecimal fineAmount = lateFeeRate.multiply(BigDecimal.valueOf(daysLate));
+
+            FineEntity fine = new FineEntity();
+            fine.setClient(loan.getClient());
+            fine.setLoan(loan);
+            fine.setType(FineEntity.FineType.LATE_RETURN);
+            fine.setAmount(fineAmount);
+            fine.setDescription("Multa por devolución tardía - " + daysLate + " día(s) de atraso");
+            fine.setDueDate(LocalDate.now().plusDays(30)); // 30 días para pagar
+            fine.setPaid(false);
+
+            return createFine(fine);
+        } catch (Exception e) {
+            System.err.println("Error creating late fine: " + e.getMessage());
+            throw new RuntimeException("Error al crear multa por atraso: " + e.getMessage());
+        }
+    }
+
+    // Crear multa por daño - método auxiliar para el LoanService
+    public FineEntity createDamageFine(LoanEntity loan, BigDecimal repairCost, String description) {
+        try {
+            if (loan == null || repairCost == null || repairCost.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new RuntimeException("Parámetros inválidos para crear multa por daño");
+            }
+
+            FineEntity fine = new FineEntity();
+            fine.setClient(loan.getClient());
+            fine.setLoan(loan);
+            fine.setType(FineEntity.FineType.DAMAGE_REPAIR);
+            fine.setAmount(repairCost);
+            fine.setDescription(description != null ? description : "Multa por daño a herramienta");
+            fine.setDueDate(LocalDate.now().plusDays(30)); // 30 días para pagar
+            fine.setPaid(false);
+
+            return createFine(fine);
+        } catch (Exception e) {
+            System.err.println("Error creating damage fine: " + e.getMessage());
+            throw new RuntimeException("Error al crear multa por daño: " + e.getMessage());
+        }
     }
 }

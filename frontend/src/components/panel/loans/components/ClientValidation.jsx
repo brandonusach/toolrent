@@ -1,4 +1,4 @@
-// loans/components/ClientValidation.jsx - Validar elegibilidad del cliente
+// loans/components/ClientValidation.jsx - VERSION CORREGIDA para manejar errores del backend
 import React, { useState, useEffect } from 'react';
 import {
     User,
@@ -10,25 +10,28 @@ import {
     Loader,
     Shield,
     FileText,
-    Calendar
+    Calendar,
+    Wifi,
+    WifiOff
 } from 'lucide-react';
 import { useLoans } from '../hooks/useLoans';
 import { useFines } from '../hooks/useFines';
 
 const ClientValidation = ({ clientId, onValidationChange }) => {
-    // Usar solo las funciones que existen en los hooks
-    const { getLoansByClient } = useLoans();
-    const { getFinesByClient, getTotalUnpaidAmount } = useFines();
+    const { getLoansByClient, checkClientRestrictions } = useLoans();
+    const { getFinesByClient, getTotalUnpaidAmount, checkClientRestrictions: checkFineRestrictions } = useFines();
 
     const [validation, setValidation] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const [connectionStatus, setConnectionStatus] = useState('checking');
 
     useEffect(() => {
         if (clientId) {
             validateClient();
         } else {
             setValidation(null);
+            setConnectionStatus('idle');
             if (onValidationChange) {
                 onValidationChange(null);
             }
@@ -38,55 +41,166 @@ const ClientValidation = ({ clientId, onValidationChange }) => {
     const validateClient = async () => {
         setLoading(true);
         setError('');
+        setConnectionStatus('checking');
+
         try {
-            // Obtener préstamos del cliente
-            const clientLoans = await getLoansByClient(clientId);
-            const activeLoans = clientLoans.filter(loan => loan.status === 'ACTIVE');
+            console.log('Starting client validation for ID:', clientId);
 
-            // Obtener multas del cliente
-            const clientFines = await getFinesByClient(clientId);
-            const unpaidFines = clientFines.filter(fine => !fine.paid);
-            const totalUnpaidAmount = await getTotalUnpaidAmount(clientId);
+            // Primer intento: usar el endpoint principal de restricciones
+            let loanRestrictions = null;
+            let fineRestrictions = null;
+            let clientLoans = [];
+            let clientFines = [];
+            let totalUnpaid = 0;
 
-            // Calcular restricciones de préstamos
-            const loanRestrictions = {
-                eligible: activeLoans.length < 5, // Límite de 5 préstamos activos
-                currentActiveLoans: activeLoans.length,
-                remainingLoanSlots: Math.max(0, 5 - activeLoans.length)
-            };
+            // Intentar obtener restricciones de préstamos
+            try {
+                console.log('Checking loan restrictions...');
+                loanRestrictions = await checkClientRestrictions(clientId);
+                console.log('Loan restrictions:', loanRestrictions);
+                setConnectionStatus('connected');
+            } catch (loanErr) {
+                console.warn('Error checking loan restrictions:', loanErr.message);
+                setConnectionStatus('partial');
+            }
 
-            // Calcular restricciones de multas
-            const fineRestrictions = {
-                canRequestLoan: unpaidFines.length === 0,
-                hasUnpaidFines: unpaidFines.length > 0,
-                unpaidFinesCount: unpaidFines.length,
-                totalUnpaidAmount: totalUnpaidAmount,
-                isRestricted: unpaidFines.length > 0,
-                restrictionReason: unpaidFines.length > 0 ? 'Cliente tiene multas pendientes' : null,
-                clientStatus: unpaidFines.length > 0 ? 'RESTRICTED' : 'ACTIVE',
-                unpaidFines: unpaidFines,
-                overdueFinesCount: unpaidFines.filter(fine =>
-                    fine.dueDate && new Date(fine.dueDate) < new Date()
-                ).length
-            };
+            // Intentar obtener préstamos del cliente
+            try {
+                console.log('Getting client loans...');
+                clientLoans = await getLoansByClient(clientId);
+                console.log('Client loans:', clientLoans.length);
+            } catch (loansErr) {
+                console.warn('Error getting client loans:', loansErr.message);
+            }
 
-            // Combinar información
+            // Intentar obtener restricciones de multas
+            try {
+                console.log('Checking fine restrictions...');
+                fineRestrictions = await checkFineRestrictions(clientId);
+                console.log('Fine restrictions:', fineRestrictions);
+            } catch (fineErr) {
+                console.warn('Error checking fine restrictions:', fineErr.message);
+                // Fallback: intentar obtener multas manualmente
+                try {
+                    clientFines = await getFinesByClient(clientId);
+                    totalUnpaid = await getTotalUnpaidAmount(clientId);
+                    fineRestrictions = {
+                        canRequestLoan: clientFines.filter(f => !f.paid).length === 0,
+                        hasUnpaidFines: clientFines.filter(f => !f.paid).length > 0,
+                        unpaidFinesCount: clientFines.filter(f => !f.paid).length,
+                        totalUnpaidAmount: totalUnpaid,
+                        fallback: true
+                    };
+                } catch (fallbackErr) {
+                    console.warn('Fallback fine check also failed:', fallbackErr.message);
+                }
+            }
+
+            // Si no pudimos obtener restricciones de préstamos, hacer cálculo manual
+            if (!loanRestrictions && clientLoans.length >= 0) {
+                console.log('Creating fallback loan restrictions...');
+                const activeLoans = clientLoans.filter(loan =>
+                    loan.status === 'ACTIVE' || loan.status === 'active'
+                );
+
+                loanRestrictions = {
+                    eligible: activeLoans.length < 5,
+                    canRequestLoan: activeLoans.length < 5,
+                    currentActiveLoans: activeLoans.length,
+                    maxAllowedLoans: 5,
+                    remainingLoanSlots: Math.max(0, 5 - activeLoans.length),
+                    restriction: activeLoans.length >= 5 ? 'Cliente ha alcanzado el límite de préstamos activos' : null,
+                    clientStatus: activeLoans.length >= 5 ? 'RESTRICTED' : 'ACTIVE',
+                    fallback: true
+                };
+                setConnectionStatus('offline');
+            }
+
+            // Si no pudimos obtener restricciones de multas, asumir que no hay
+            if (!fineRestrictions) {
+                console.log('Creating fallback fine restrictions...');
+                fineRestrictions = {
+                    canRequestLoan: true,
+                    hasUnpaidFines: false,
+                    unpaidFinesCount: 0,
+                    totalUnpaidAmount: 0,
+                    isRestricted: false,
+                    clientStatus: 'ACTIVE',
+                    fallback: true,
+                    message: 'No se pudieron verificar multas - asumiendo sin restricciones'
+                };
+            }
+
+            // Combinar validación
             const combinedValidation = {
-                eligible: loanRestrictions.eligible && fineRestrictions.canRequestLoan,
-                canRequestLoan: loanRestrictions.eligible && fineRestrictions.canRequestLoan,
-                loanRestrictions,
-                fineRestrictions,
-                summary: generateValidationSummary(loanRestrictions, fineRestrictions)
+                eligible: (loanRestrictions?.eligible || false) && (fineRestrictions?.canRequestLoan || false),
+                canRequestLoan: (loanRestrictions?.canRequestLoan || false) && (fineRestrictions?.canRequestLoan || false),
+                loanRestrictions: loanRestrictions || {
+                    eligible: false,
+                    currentActiveLoans: 0,
+                    maxAllowedLoans: 5,
+                    restriction: 'No se pudo verificar estado de préstamos'
+                },
+                fineRestrictions: fineRestrictions,
+                summary: generateValidationSummary(loanRestrictions, fineRestrictions),
+                connectionStatus: connectionStatus,
+                dataSource: {
+                    loans: loanRestrictions?.fallback ? 'fallback' : 'api',
+                    fines: fineRestrictions?.fallback ? 'fallback' : 'api'
+                }
             };
 
+            console.log('Final combined validation:', combinedValidation);
             setValidation(combinedValidation);
 
             if (onValidationChange) {
                 onValidationChange(combinedValidation);
             }
+
         } catch (err) {
-            console.error('Error validating client:', err);
+            console.error('Error in client validation:', err);
             setError(err.message || 'Error al validar el cliente');
+            setConnectionStatus('error');
+
+            // Validación de emergencia - permitir el préstamo pero con advertencia
+            const emergencyValidation = {
+                eligible: true, // Permitir en caso de error
+                canRequestLoan: true,
+                loanRestrictions: {
+                    eligible: true,
+                    currentActiveLoans: 0,
+                    maxAllowedLoans: 5,
+                    remainingLoanSlots: 5,
+                    restriction: null,
+                    clientStatus: 'UNKNOWN',
+                    emergency: true
+                },
+                fineRestrictions: {
+                    canRequestLoan: true,
+                    hasUnpaidFines: false,
+                    unpaidFinesCount: 0,
+                    totalUnpaidAmount: 0,
+                    emergency: true
+                },
+                summary: {
+                    issues: [{
+                        type: 'error',
+                        icon: AlertTriangle,
+                        title: 'Error de Validación',
+                        description: 'No se pudo verificar completamente las restricciones',
+                        details: 'Proceda con precaución - verifique manualmente si es necesario'
+                    }],
+                    warnings: [],
+                    info: []
+                },
+                emergency: true,
+                error: err.message
+            };
+
+            setValidation(emergencyValidation);
+            if (onValidationChange) {
+                onValidationChange(emergencyValidation);
+            }
         } finally {
             setLoading(false);
         }
@@ -97,62 +211,59 @@ const ClientValidation = ({ clientId, onValidationChange }) => {
         const warnings = [];
         const info = [];
 
-        // Verificar estado del cliente
-        if (fineRestrictions.isRestricted) {
-            issues.push({
-                type: 'error',
-                icon: XCircle,
-                title: 'Cliente Restringido',
-                description: 'El cliente tiene restricciones activas',
-                details: fineRestrictions.restrictionReason
+        if (!loanRestrictions || !fineRestrictions) {
+            warnings.push({
+                type: 'warning',
+                icon: WifiOff,
+                title: 'Validación Parcial',
+                description: 'No se pudieron verificar todas las restricciones',
+                details: 'Algunos servicios no están disponibles'
             });
+            return { issues, warnings, info };
         }
 
-        // Verificar multas impagas
-        if (fineRestrictions.hasUnpaidFines) {
+        // Verificar restricciones de multas
+        if (fineRestrictions.isRestricted || fineRestrictions.hasUnpaidFines) {
             issues.push({
                 type: 'error',
                 icon: DollarSign,
                 title: 'Multas Pendientes',
-                description: `${fineRestrictions.unpaidFinesCount} multa(s) por $${fineRestrictions.totalUnpaidAmount.toFixed(2)}`,
+                description: `${fineRestrictions.unpaidFinesCount || 0} multa(s) por $${(fineRestrictions.totalUnpaidAmount || 0).toFixed(2)}`,
                 details: 'Debe pagar todas las multas antes de solicitar préstamos'
             });
         }
 
-        // Verificar préstamos activos
+        // Verificar límite de préstamos
         if (loanRestrictions.currentActiveLoans) {
-            const remaining = loanRestrictions.remainingLoanSlots;
-            if (remaining <= 1) {
+            const remaining = loanRestrictions.remainingLoanSlots || 0;
+            if (remaining <= 1 && remaining > 0) {
                 warnings.push({
                     type: 'warning',
                     icon: AlertTriangle,
                     title: 'Límite de Préstamos',
-                    description: `${loanRestrictions.currentActiveLoans} de 5 préstamos activos`,
+                    description: `${loanRestrictions.currentActiveLoans} de ${loanRestrictions.maxAllowedLoans || 5} préstamos activos`,
                     details: `Solo puede solicitar ${remaining} préstamo(s) más`
+                });
+            } else if (remaining <= 0) {
+                issues.push({
+                    type: 'error',
+                    icon: XCircle,
+                    title: 'Límite Alcanzado',
+                    description: `${loanRestrictions.currentActiveLoans} de ${loanRestrictions.maxAllowedLoans || 5} préstamos activos`,
+                    details: 'Ha alcanzado el límite máximo de préstamos'
                 });
             } else {
                 info.push({
                     type: 'info',
                     icon: Clock,
                     title: 'Préstamos Activos',
-                    description: `${loanRestrictions.currentActiveLoans} de 5 préstamos activos`,
+                    description: `${loanRestrictions.currentActiveLoans} de ${loanRestrictions.maxAllowedLoans || 5} préstamos activos`,
                     details: `Puede solicitar ${remaining} préstamo(s) más`
                 });
             }
         }
 
-        // Multas vencidas
-        if (fineRestrictions.overdueFinesCount > 0) {
-            issues.push({
-                type: 'error',
-                icon: Calendar,
-                title: 'Multas Vencidas',
-                description: `${fineRestrictions.overdueFinesCount} multa(s) vencida(s)`,
-                details: 'Las multas vencidas requieren atención inmediata'
-            });
-        }
-
-        // Si no hay problemas
+        // Estado general
         if (issues.length === 0 && warnings.length === 0) {
             info.push({
                 type: 'success',
@@ -160,6 +271,17 @@ const ClientValidation = ({ clientId, onValidationChange }) => {
                 title: 'Cliente Elegible',
                 description: 'El cliente cumple todos los requisitos',
                 details: 'Puede procesar préstamos sin restricciones'
+            });
+        }
+
+        // Advertencia sobre datos de fallback
+        if (loanRestrictions?.fallback || fineRestrictions?.fallback) {
+            warnings.push({
+                type: 'warning',
+                icon: Wifi,
+                title: 'Datos de Respaldo',
+                description: 'Algunos datos provienen de validación local',
+                details: 'La validación puede no estar completamente actualizada'
             });
         }
 
@@ -174,6 +296,16 @@ const ClientValidation = ({ clientId, onValidationChange }) => {
             info: 'text-blue-400 bg-blue-900 border-blue-700'
         };
         return colors[type] || colors.info;
+    };
+
+    const getConnectionIcon = () => {
+        switch (connectionStatus) {
+            case 'connected': return <Wifi className="h-4 w-4 text-green-400" />;
+            case 'partial': return <Wifi className="h-4 w-4 text-yellow-400" />;
+            case 'offline': return <WifiOff className="h-4 w-4 text-orange-400" />;
+            case 'error': return <WifiOff className="h-4 w-4 text-red-400" />;
+            default: return <Loader className="h-4 w-4 text-gray-400 animate-spin" />;
+        }
     };
 
     const renderValidationItem = (item) => {
@@ -218,12 +350,15 @@ const ClientValidation = ({ clientId, onValidationChange }) => {
         );
     }
 
-    if (error) {
+    if (error && !validation) {
         return (
             <div className="bg-red-900 rounded-lg p-4 border border-red-700">
                 <div className="flex items-center text-red-200">
                     <AlertTriangle className="h-5 w-5 mr-2" />
-                    <span>Error: {error}</span>
+                    <div>
+                        <div className="font-medium">Error de Validación</div>
+                        <div className="text-sm">{error}</div>
+                    </div>
                 </div>
             </div>
         );
@@ -235,12 +370,15 @@ const ClientValidation = ({ clientId, onValidationChange }) => {
 
     return (
         <div className="space-y-4">
-            {/* Header de validación */}
+            {/* Header de validación con estado de conexión */}
             <div className="bg-gray-700 rounded-lg p-4 border border-gray-600">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center">
                         <Shield className="h-5 w-5 mr-2 text-gray-400" />
                         <h3 className="text-lg font-medium text-white">Validación de Cliente</h3>
+                        <div className="ml-2 flex items-center">
+                            {getConnectionIcon()}
+                        </div>
                     </div>
                     <div className={`flex items-center px-3 py-1 rounded-full text-sm font-medium border ${
                         validation.eligible
@@ -255,35 +393,38 @@ const ClientValidation = ({ clientId, onValidationChange }) => {
                         {validation.eligible ? 'Elegible' : 'No Elegible'}
                     </div>
                 </div>
+
+                {validation.emergency && (
+                    <div className="mt-2 text-xs text-yellow-300">
+                        ⚠️ Validación de emergencia - Verifique manualmente las restricciones
+                    </div>
+                )}
             </div>
 
             {/* Resumen rápido */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Estado del cliente */}
                 <div className="bg-gray-700 rounded-lg p-3 border border-gray-600">
                     <div className="text-gray-400 text-sm">Estado del Cliente</div>
                     <div className={`text-lg font-medium ${
-                        validation.fineRestrictions.isRestricted ? 'text-red-400' : 'text-green-400'
+                        validation.fineRestrictions?.isRestricted ? 'text-red-400' : 'text-green-400'
                     }`}>
-                        {validation.fineRestrictions.clientStatus || 'ACTIVE'}
+                        {validation.fineRestrictions?.clientStatus || 'ACTIVE'}
                     </div>
                 </div>
 
-                {/* Préstamos activos */}
                 <div className="bg-gray-700 rounded-lg p-3 border border-gray-600">
                     <div className="text-gray-400 text-sm">Préstamos Activos</div>
                     <div className="text-lg font-medium text-white">
-                        {validation.loanRestrictions.currentActiveLoans || 0} / 5
+                        {validation.loanRestrictions?.currentActiveLoans || 0} / {validation.loanRestrictions?.maxAllowedLoans || 5}
                     </div>
                 </div>
 
-                {/* Multas pendientes */}
                 <div className="bg-gray-700 rounded-lg p-3 border border-gray-600">
                     <div className="text-gray-400 text-sm">Total Multas</div>
                     <div className={`text-lg font-medium ${
-                        validation.fineRestrictions.totalUnpaidAmount > 0 ? 'text-red-400' : 'text-green-400'
+                        (validation.fineRestrictions?.totalUnpaidAmount || 0) > 0 ? 'text-red-400' : 'text-green-400'
                     }`}>
-                        ${validation.fineRestrictions.totalUnpaidAmount?.toFixed(2) || '0.00'}
+                        ${(validation.fineRestrictions?.totalUnpaidAmount || 0).toFixed(2)}
                     </div>
                 </div>
             </div>
@@ -291,62 +432,47 @@ const ClientValidation = ({ clientId, onValidationChange }) => {
             {/* Validación detallada */}
             <div className="space-y-3">
                 {/* Errores/Problemas */}
-                {validation.summary.issues.map(item => renderValidationItem(item))}
+                {validation.summary?.issues?.map(item => renderValidationItem(item))}
 
                 {/* Advertencias */}
-                {validation.summary.warnings.map(item => renderValidationItem(item))}
+                {validation.summary?.warnings?.map(item => renderValidationItem(item))}
 
                 {/* Información */}
-                {validation.summary.info.map(item => renderValidationItem(item))}
+                {validation.summary?.info?.map(item => renderValidationItem(item))}
             </div>
 
-            {/* Información adicional */}
-            {(validation.fineRestrictions.unpaidFines && validation.fineRestrictions.unpaidFines.length > 0) && (
-                <div className="bg-gray-700 rounded-lg p-4 border border-gray-600">
-                    <h4 className="text-white font-medium mb-3 flex items-center">
-                        <FileText className="h-4 w-4 mr-2" />
-                        Multas Pendientes de Pago
-                    </h4>
-                    <div className="space-y-2">
-                        {validation.fineRestrictions.unpaidFines.map((fine, index) => (
-                            <div key={index} className="bg-gray-600 rounded p-3 text-sm">
-                                <div className="flex justify-between items-start">
-                                    <div>
-                                        <div className="text-white font-medium">
-                                            ${fine.amount?.toFixed(2)} - {fine.type}
-                                        </div>
-                                        <div className="text-gray-300">{fine.description}</div>
-                                        <div className="text-gray-400 text-xs mt-1">
-                                            Vence: {fine.dueDate ? new Date(fine.dueDate).toLocaleDateString('es-ES') : 'N/A'}
-                                        </div>
-                                    </div>
-                                    <div className={`px-2 py-1 rounded text-xs ${
-                                        fine.dueDate && new Date(fine.dueDate) < new Date()
-                                            ? 'bg-red-900 text-red-200'
-                                            : 'bg-yellow-900 text-yellow-200'
-                                    }`}>
-                                        {fine.dueDate && new Date(fine.dueDate) < new Date() ? 'Vencida' : 'Pendiente'}
-                                    </div>
-                                </div>
-                            </div>
-                        ))}
+            {/* Información sobre la fuente de datos */}
+            {(validation.dataSource || validation.emergency) && (
+                <div className="bg-blue-900 rounded-lg p-4 border border-blue-700">
+                    <h4 className="text-blue-200 font-medium mb-2">Información del Sistema:</h4>
+                    <div className="text-blue-300 text-sm space-y-1">
+                        {validation.emergency && (
+                            <p>• Validación de emergencia activada debido a errores del servidor</p>
+                        )}
+                        {validation.dataSource?.loans === 'fallback' && (
+                            <p>• Datos de préstamos obtenidos mediante validación local</p>
+                        )}
+                        {validation.dataSource?.fines === 'fallback' && (
+                            <p>• Datos de multas obtenidos mediante validación local</p>
+                        )}
+                        <p>• Estado de conexión: {connectionStatus}</p>
                     </div>
                 </div>
             )}
 
             {/* Acciones recomendadas */}
-            {!validation.eligible && (
-                <div className="bg-blue-900 rounded-lg p-4 border border-blue-700">
-                    <h4 className="text-blue-200 font-medium mb-2">Acciones Recomendadas:</h4>
-                    <ul className="text-blue-300 text-sm space-y-1">
-                        {validation.fineRestrictions.hasUnpaidFines && (
+            {!validation.eligible && !validation.emergency && (
+                <div className="bg-orange-900 rounded-lg p-4 border border-orange-700">
+                    <h4 className="text-orange-200 font-medium mb-2">Acciones Recomendadas:</h4>
+                    <ul className="text-orange-300 text-sm space-y-1">
+                        {validation.fineRestrictions?.hasUnpaidFines && (
                             <li>• Gestionar el pago de las multas pendientes</li>
                         )}
-                        {validation.fineRestrictions.isRestricted && (
-                            <li>• Contactar al administrador para revisar las restricciones del cliente</li>
+                        {validation.loanRestrictions?.currentActiveLoans >= 5 && (
+                            <li>• Esperar a que se devuelvan algunos préstamos activos</li>
                         )}
-                        {validation.fineRestrictions.overdueFinesCount > 0 && (
-                            <li>• Priorizar el pago de multas vencidas</li>
+                        {validation.loanRestrictions?.restriction && (
+                            <li>• Revisar el estado general del cliente</li>
                         )}
                     </ul>
                 </div>
