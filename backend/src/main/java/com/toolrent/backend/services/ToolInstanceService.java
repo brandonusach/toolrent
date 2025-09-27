@@ -218,13 +218,62 @@ public class ToolInstanceService {
 
         return decommissionedInstances;
     }
-    // Helper class for statistics
+
+    // Reserve multiple instances for loan
+    @Transactional
+    public List<ToolInstanceEntity> reserveInstancesForLoan(Long toolId, int quantity) {
+        if (quantity <= 0) {
+            throw new RuntimeException("Quantity must be greater than 0");
+        }
+
+        List<ToolInstanceEntity> availableInstances = toolInstanceRepository.findAvailableInstancesByToolId(toolId);
+
+        if (availableInstances.size() < quantity) {
+            throw new RuntimeException("Not enough available instances for loan. Requested: " + quantity + ", Available: " + availableInstances.size());
+        }
+
+        List<ToolInstanceEntity> reservedInstances = new java.util.ArrayList<>();
+        for (int i = 0; i < quantity; i++) {
+            ToolInstanceEntity instance = availableInstances.get(i);
+            instance.setStatus(ToolInstanceStatus.LOANED);
+            reservedInstances.add(toolInstanceRepository.save(instance));
+        }
+
+        return reservedInstances;
+    }
+
+    // Return multiple instances from loan
+    @Transactional
+    public List<ToolInstanceEntity> returnInstancesFromLoan(Long toolId, int quantity, boolean isDamaged) {
+        if (quantity <= 0) {
+            throw new RuntimeException("Quantity must be greater than 0");
+        }
+
+        List<ToolInstanceEntity> loanedInstances = toolInstanceRepository.findLoanedInstancesByToolId(toolId);
+
+        if (loanedInstances.size() < quantity) {
+            throw new RuntimeException("Not enough loaned instances to return. Requested: " + quantity + ", Loaned: " + loanedInstances.size());
+        }
+
+        List<ToolInstanceEntity> returnedInstances = new java.util.ArrayList<>();
+        ToolInstanceStatus newStatus = isDamaged ? ToolInstanceStatus.UNDER_REPAIR : ToolInstanceStatus.AVAILABLE;
+
+        for (int i = 0; i < quantity; i++) {
+            ToolInstanceEntity instance = loanedInstances.get(i);
+            instance.setStatus(newStatus);
+            returnedInstances.add(toolInstanceRepository.save(instance));
+        }
+
+        return returnedInstances;
+    }
+
+    // Inner class for statistics
     public static class ToolInstanceStats {
-        public final long available;
-        public final long loaned;
-        public final long underRepair;
-        public final long decommissioned;
-        public final long total;
+        private final long available;
+        private final long loaned;
+        private final long underRepair;
+        private final long decommissioned;
+        private final long total;
 
         public ToolInstanceStats(long available, long loaned, long underRepair, long decommissioned, long total) {
             this.available = available;
@@ -233,5 +282,12 @@ public class ToolInstanceService {
             this.decommissioned = decommissioned;
             this.total = total;
         }
+
+        // Getters
+        public long getAvailable() { return available; }
+        public long getLoaned() { return loaned; }
+        public long getUnderRepair() { return underRepair; }
+        public long getDecommissioned() { return decommissioned; }
+        public long getTotal() { return total; }
     }
 }

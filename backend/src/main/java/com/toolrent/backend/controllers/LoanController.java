@@ -11,6 +11,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashMap;
 import java.util.List;
@@ -19,6 +20,7 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/loans")
 @CrossOrigin("*")
+@Transactional
 public class LoanController {
 
     @Autowired
@@ -35,14 +37,29 @@ public class LoanController {
 
     @GetMapping("/")
     public ResponseEntity<List<LoanEntity>> getAllLoans() {
-        List<LoanEntity> loans = loanService.getAllLoans();
-        return ResponseEntity.ok(loans);
+        try {
+            List<LoanEntity> loans = loanService.getAllLoans();
+            return ResponseEntity.ok(loans);
+        } catch (Exception e) {
+            System.err.println("Error getting all loans: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
     }
 
     @GetMapping("/{id}")
     public ResponseEntity<LoanEntity> getLoanById(@PathVariable Long id) {
-        LoanEntity loan = loanService.getLoanById(id);
-        return ResponseEntity.ok(loan);
+        try {
+            LoanEntity loan = loanService.getLoanById(id);
+            if (loan == null) {
+                return ResponseEntity.notFound().build();
+            }
+            return ResponseEntity.ok(loan);
+        } catch (Exception e) {
+            System.err.println("Error getting loan by id: " + e.getMessage());
+            e.printStackTrace();
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
     }
 
     @PostMapping("/")
@@ -193,15 +210,44 @@ public class LoanController {
     }
 
     @GetMapping("/active")
-    public ResponseEntity<List<LoanEntity>> getActiveLoans() {
-        List<LoanEntity> activeLoans = loanService.getActiveLoans();
-        return ResponseEntity.ok(activeLoans);
+    public ResponseEntity<?> getActiveLoans() {
+        try {
+            System.out.println("Getting active loans...");
+            List<LoanEntity> activeLoans = loanService.getActiveLoans();
+            System.out.println("Found " + activeLoans.size() + " active loans");
+            return ResponseEntity.ok(activeLoans);
+        } catch (Exception e) {
+            System.err.println("Error getting active loans: " + e.getMessage());
+            e.printStackTrace();
+
+            // Respuesta de error estructurada
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", true);
+            errorResponse.put("message", "Error al obtener préstamos activos: " + e.getMessage());
+            errorResponse.put("timestamp", java.time.LocalDateTime.now());
+            errorResponse.put("data", List.of()); // Lista vacía como fallback
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
     }
 
     @GetMapping("/overdue")
-    public ResponseEntity<List<LoanEntity>> getOverdueLoans() {
-        List<LoanEntity> overdueLoans = loanService.getOverdueLoans();
-        return ResponseEntity.ok(overdueLoans);
+    public ResponseEntity<?> getOverdueLoans() {
+        try {
+            List<LoanEntity> overdueLoans = loanService.getOverdueLoans();
+            return ResponseEntity.ok(overdueLoans);
+        } catch (Exception e) {
+            System.err.println("Error getting overdue loans: " + e.getMessage());
+            e.printStackTrace();
+
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", true);
+            errorResponse.put("message", "Error al obtener préstamos vencidos: " + e.getMessage());
+            errorResponse.put("timestamp", java.time.LocalDateTime.now());
+            errorResponse.put("data", List.of());
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
     }
 
     @GetMapping("/client/{clientId}")
@@ -244,3 +290,4 @@ public class LoanController {
         return ResponseEntity.ok(summary);
     }
 }
+

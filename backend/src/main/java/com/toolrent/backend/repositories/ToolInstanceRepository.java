@@ -57,6 +57,10 @@ public interface ToolInstanceRepository extends JpaRepository<ToolInstanceEntity
     @Query("SELECT ti FROM ToolInstanceEntity ti WHERE ti.tool.id = :toolId AND ti.status = 'AVAILABLE'")
     List<ToolInstanceEntity> findAvailableInstancesByToolId(@Param("toolId") Long toolId);
 
+    // Get loaned instances by tool (for returning loans)
+    @Query("SELECT ti FROM ToolInstanceEntity ti WHERE ti.tool.id = :toolId AND ti.status = 'LOANED'")
+    List<ToolInstanceEntity> findLoanedInstancesByToolId(@Param("toolId") Long toolId);
+
     // Count instances by multiple statuses
     @Query("SELECT COUNT(ti) FROM ToolInstanceEntity ti WHERE ti.tool.id = :toolId AND ti.status IN :statuses")
     Long countByToolIdAndStatusIn(@Param("toolId") Long toolId, @Param("statuses") List<ToolInstanceStatus> statuses);

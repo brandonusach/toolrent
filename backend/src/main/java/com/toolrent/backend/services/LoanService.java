@@ -38,6 +38,9 @@ public class LoanService {
     @Autowired(required = false) // Hacer opcional en caso de que no esté implementado
     private KardexMovementService kardexMovementService;
 
+    @Autowired(required = false) // Inyectar el servicio de instancias
+    private ToolInstanceService toolInstanceService;
+
     // RF2.5: Check client restrictions - VERSIÓN MEJORADA Y SEGURA
     public Map<String, Object> checkClientRestrictions(Long clientId) {
         Map<String, Object> restrictions = new HashMap<>();
@@ -192,17 +195,41 @@ public class LoanService {
     }
 
     // RF6.1: Get active loans - VERSIÓN SEGURA
+    @Transactional(readOnly = true)
     public List<LoanEntity> getActiveLoans() {
         try {
-            return loanRepository.findActiveLoans();
+            System.out.println("Attempting to get active loans from repository...");
+            List<LoanEntity> loans = loanRepository.findActiveLoans();
+            System.out.println("Successfully retrieved " + loans.size() + " active loans");
+            return loans;
         } catch (Exception e) {
-            System.err.println("Error getting active loans: " + e.getMessage());
-            // Fallback: buscar por status
+            System.err.println("Error getting active loans with custom query: " + e.getMessage());
+            e.printStackTrace();
+
+            // Fallback: buscar por status usando método simple
             try {
-                return loanRepository.findByStatus(LoanEntity.LoanStatus.ACTIVE);
+                System.out.println("Trying fallback method with findByStatus...");
+                List<LoanEntity> fallbackLoans = loanRepository.findByStatus(LoanEntity.LoanStatus.ACTIVE);
+                System.out.println("Fallback method returned " + fallbackLoans.size() + " loans");
+                return fallbackLoans;
             } catch (Exception fallbackError) {
-                System.err.println("Fallback also failed: " + fallbackError.getMessage());
-                return List.of(); // Retornar lista vacía en caso de error
+                System.err.println("Fallback method also failed: " + fallbackError.getMessage());
+                fallbackError.printStackTrace();
+
+                // Último recurso: buscar todos y filtrar
+                try {
+                    System.out.println("Trying final fallback with findAll...");
+                    List<LoanEntity> allLoans = loanRepository.findAll();
+                    List<LoanEntity> activeLoans = allLoans.stream()
+                            .filter(loan -> loan.getStatus() == LoanEntity.LoanStatus.ACTIVE)
+                            .collect(Collectors.toList());
+                    System.out.println("Final fallback returned " + activeLoans.size() + " active loans");
+                    return activeLoans;
+                } catch (Exception finalError) {
+                    System.err.println("All methods failed: " + finalError.getMessage());
+                    finalError.printStackTrace();
+                    return List.of(); // Retornar lista vacía en caso de error
+                }
             }
         }
     }
@@ -380,7 +407,7 @@ public class LoanService {
         }
     }
 
-    // RF2.1: Create new loan - VERSIÓN MEJORADA
+    // RF2.1: Create new loan - VERSIÓN MEJORADA CON ESTADOS CORRECTOS E INSTANCIAS
     @Transactional
     public LoanEntity createLoan(LoanEntity loan) {
         try {
@@ -402,11 +429,42 @@ public class LoanService {
             loan.setDailyRate(dailyRate);
             loan.setStatus(LoanEntity.LoanStatus.ACTIVE);
 
-            // Update tool stock
+            // Update tool stock AND status
             ToolEntity tool = loan.getTool();
             int newStock = tool.getCurrentStock() - loan.getQuantity();
             tool.setCurrentStock(newStock);
+
+            // 🔧 CORRECCIÓN: Actualizar estado de la herramienta según el stock
+            if (newStock <= 0) {
+                tool.setStatus(ToolEntity.ToolStatus.LOANED); // Completamente prestada
+                System.out.println("Tool " + tool.getName() + " status changed to LOANED (stock: " + newStock + ")");
+            } else {
+                // Si aún hay stock disponible, mantener como AVAILABLE
+                tool.setStatus(ToolEntity.ToolStatus.AVAILABLE);
+                System.out.println("Tool " + tool.getName() + " remains AVAILABLE (stock: " + newStock + "/" + tool.getInitialStock() + ")");
+            }
+
+            // 🔧 NUEVO: Actualizar instancias individuales de herramientas
+            if (toolInstanceService != null) {
+                try {
+                    System.out.println("Reserving " + loan.getQuantity() + " instances for loan...");
+                    List<ToolInstanceEntity> reservedInstances = toolInstanceService.reserveInstancesForLoan(
+                            tool.getId(), loan.getQuantity());
+                    System.out.println("Successfully reserved " + reservedInstances.size() + " instances:");
+                    for (ToolInstanceEntity instance : reservedInstances) {
+                        System.out.println("  - Instance ID: " + instance.getId() + " - Status: " + instance.getStatus());
+                    }
+                } catch (Exception e) {
+                    System.err.println("Error reserving tool instances: " + e.getMessage());
+                    // No fallar el préstamo, pero registrar el error
+                    System.err.println("WARNING: Tool instances were not updated. Stock update only applied to main tool entity.");
+                }
+            } else {
+                System.out.println("ToolInstanceService not available - skipping individual instance updates");
+            }
+
             toolService.updateTool(tool.getId(), tool);
+            System.out.println("Tool stock updated: " + tool.getName() + " - New stock: " + newStock);
 
             LoanEntity savedLoan = loanRepository.save(loan);
 
@@ -574,7 +632,7 @@ public class LoanService {
         }
     }
 
-    // Return tool - NUEVO MÉTODO REQUERIDO
+    // Return tool - VERSIÓN CORREGIDA CON ESTADOS CORRECTOS E INSTANCIAS
     @Transactional
     public LoanEntity returnTool(Long loanId, Boolean damaged, String notes) {
         try {
@@ -593,22 +651,65 @@ public class LoanService {
                 loan.setNotes(existingNotes.isEmpty() ? notes : existingNotes + "\n" + notes);
             }
 
-            // Actualizar stock de herramienta
+            // 🔧 CORRECCIÓN: Actualizar stock Y estado de herramienta según el caso
             ToolEntity tool = loan.getTool();
             if (damaged != null && damaged) {
                 // Herramienta dañada - cambiar estado a reparación
                 tool.setStatus(ToolEntity.ToolStatus.UNDER_REPAIR);
+                System.out.println("Tool " + tool.getName() + " status changed to UNDER_REPAIR (damaged return)");
                 // No devolver stock aún, se devolverá cuando termine la reparación
+
+                // 🔧 NUEVO: Actualizar instancias individuales a UNDER_REPAIR
+                if (toolInstanceService != null) {
+                    try {
+                        System.out.println("Returning " + loan.getQuantity() + " damaged instances...");
+                        List<ToolInstanceEntity> returnedInstances = toolInstanceService.returnInstancesFromLoan(
+                                tool.getId(), loan.getQuantity(), true); // true = damaged
+                        System.out.println("Successfully set " + returnedInstances.size() + " instances to UNDER_REPAIR");
+                    } catch (Exception e) {
+                        System.err.println("Error updating tool instances to UNDER_REPAIR: " + e.getMessage());
+                    }
+                } else {
+                    System.out.println("ToolInstanceService not available - skipping individual instance updates");
+                }
             } else {
                 // Devolución normal - restaurar stock
                 int newStock = tool.getCurrentStock() + loan.getQuantity();
                 tool.setCurrentStock(newStock);
+
+                // 🔧 CORRECCIÓN: Actualizar estado basado en el nuevo stock
+                if (newStock >= tool.getInitialStock()) {
+                    tool.setStatus(ToolEntity.ToolStatus.AVAILABLE); // Completamente disponible
+                    System.out.println("Tool " + tool.getName() + " status changed to AVAILABLE (stock restored: " + newStock + "/" + tool.getInitialStock() + ")");
+                } else if (newStock > 0) {
+                    tool.setStatus(ToolEntity.ToolStatus.AVAILABLE); // Parcialmente disponible pero aún se considera disponible
+                    System.out.println("Tool " + tool.getName() + " status remains AVAILABLE (partial stock: " + newStock + "/" + tool.getInitialStock() + ")");
+                } else {
+                    // Este caso no debería ocurrir en devoluciones normales, pero por seguridad
+                    tool.setStatus(ToolEntity.ToolStatus.LOANED);
+                    System.out.println("Tool " + tool.getName() + " status remains LOANED (no stock available: " + newStock + ")");
+                }
+
+                // 🔧 NUEVO: Actualizar instancias individuales a AVAILABLE
+                if (toolInstanceService != null) {
+                    try {
+                        System.out.println("Returning " + loan.getQuantity() + " instances in good condition...");
+                        List<ToolInstanceEntity> returnedInstances = toolInstanceService.returnInstancesFromLoan(
+                                tool.getId(), loan.getQuantity(), false); // false = not damaged
+                        System.out.println("Successfully set " + returnedInstances.size() + " instances to AVAILABLE");
+                    } catch (Exception e) {
+                        System.err.println("Error updating tool instances to AVAILABLE: " + e.getMessage());
+                    }
+                } else {
+                    System.out.println("ToolInstanceService not available - skipping individual instance updates");
+                }
             }
 
             try {
                 toolService.updateTool(tool.getId(), tool);
+                System.out.println("Tool updated successfully: " + tool.getName() + " - Status: " + tool.getStatus());
             } catch (Exception e) {
-                System.err.println("Error updating tool stock: " + e.getMessage());
+                System.err.println("Error updating tool stock and status: " + e.getMessage());
                 // No fallar la devolución por esto
             }
 

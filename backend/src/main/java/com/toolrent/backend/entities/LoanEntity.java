@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import com.fasterxml.jackson.annotation.JsonManagedReference;
 import java.time.LocalDate;
 import java.math.BigDecimal;
 
@@ -18,12 +19,14 @@ public class LoanEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "client_id", nullable = false)
+    @JsonManagedReference
     private ClientEntity client;
 
-    @ManyToOne(fetch = FetchType.LAZY)
+    @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "tool_id", nullable = false)
+    @JsonManagedReference
     private ToolEntity tool;
 
     @Column(nullable = false)
@@ -47,6 +50,16 @@ public class LoanEntity {
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private LoanStatus status;
+
+    @PrePersist
+    protected void onCreate() {
+        if (loanDate == null) {
+            loanDate = LocalDate.now();
+        }
+        if (status == null) {
+            status = LoanStatus.ACTIVE;
+        }
+    }
 
     public enum LoanStatus {
         ACTIVE,      // Préstamo activo

@@ -10,10 +10,14 @@ import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Repository
 public interface FineRepository extends JpaRepository<FineEntity, Long> {
+
+    // MÉTODO PRINCIPAL QUE FALTABA - Obtener todas las multas de un cliente
+    List<FineEntity> findByClient(ClientEntity client);
 
     // RF2.5: Find unpaid fines by client to block new loans
     List<FineEntity> findByClientAndPaidFalse(ClientEntity client);
@@ -23,6 +27,12 @@ public interface FineRepository extends JpaRepository<FineEntity, Long> {
 
     // Find all unpaid fines
     List<FineEntity> findByPaidFalse();
+
+    // Find fines by loan
+    List<FineEntity> findByLoan(LoanEntity loan);
+
+    // Find fines by type
+    List<FineEntity> findByType(FineEntity.FineType type);
 
     // Check if client has unpaid fines
     @Query("SELECT COUNT(f) FROM FineEntity f WHERE f.client = :client AND f.paid = false")
@@ -36,6 +46,10 @@ public interface FineRepository extends JpaRepository<FineEntity, Long> {
     @Query("SELECT COUNT(f) FROM FineEntity f WHERE f.paid = false AND f.dueDate < :currentDate")
     long countOverdueFines(@Param("currentDate") LocalDate currentDate);
 
+    // Find overdue fines
+    @Query("SELECT f FROM FineEntity f WHERE f.paid = false AND f.dueDate < :currentDate")
+    List<FineEntity> findOverdueFines(@Param("currentDate") LocalDate currentDate);
+
     // Get total unpaid amount for a client
     @Query("SELECT COALESCE(SUM(f.amount), 0) FROM FineEntity f WHERE f.client = :client AND f.paid = false")
     BigDecimal getTotalUnpaidAmountByClient(@Param("client") ClientEntity client);
@@ -48,44 +62,18 @@ public interface FineRepository extends JpaRepository<FineEntity, Long> {
     @Query("SELECT COALESCE(SUM(f.amount), 0) FROM FineEntity f WHERE f.paid = true")
     BigDecimal getTotalPaidAmount();
 
-    // Find fines by loan
-    List<FineEntity> findByLoan(LoanEntity loan);
-
-    // Find fines by type
-    List<FineEntity> findByType(FineEntity.FineType type);
-
-    // Find overdue fines (unpaid and past due date)
-    @Query("SELECT f FROM FineEntity f WHERE f.paid = false AND f.dueDate < :currentDate")
-    List<FineEntity> findOverdueFines(@Param("currentDate") LocalDate currentDate);
-
-    // Find fines by client and type
-    List<FineEntity> findByClientAndType(ClientEntity client, FineEntity.FineType type);
-
-    // Find fines by date range
-    @Query("SELECT f FROM FineEntity f WHERE f.createdAt >= :startDate AND f.createdAt < :endDate")
-    List<FineEntity> findByDateRange(@Param("startDate") java.time.LocalDateTime startDate,
-                                     @Param("endDate") java.time.LocalDateTime endDate);
+    // Find fines in date range
+    @Query("SELECT f FROM FineEntity f WHERE f.createdAt BETWEEN :startDate AND :endDate")
+    List<FineEntity> findByDateRange(@Param("startDate") LocalDateTime startDate, @Param("endDate") LocalDateTime endDate);
 
     // Find fines by client in date range
-    @Query("SELECT f FROM FineEntity f WHERE f.client = :client AND f.createdAt >= :startDate AND f.createdAt < :endDate")
+    @Query("SELECT f FROM FineEntity f WHERE f.client = :client AND f.createdAt BETWEEN :startDate AND :endDate")
     List<FineEntity> findByClientAndDateRange(@Param("client") ClientEntity client,
-                                              @Param("startDate") java.time.LocalDateTime startDate,
-                                              @Param("endDate") java.time.LocalDateTime endDate);
+                                              @Param("startDate") LocalDateTime startDate,
+                                              @Param("endDate") LocalDateTime endDate);
 
-    // Statistics: Total fines collected in date range
-    @Query("SELECT COALESCE(SUM(f.amount), 0) FROM FineEntity f WHERE f.paid = true AND f.paidDate >= :startDate AND f.paidDate <= :endDate")
-    BigDecimal getTotalPaidAmountInDateRange(@Param("startDate") LocalDate startDate,
-                                             @Param("endDate") LocalDate endDate);
-
-    // Statistics: Count fines by type
-    @Query("SELECT f.type, COUNT(f) FROM FineEntity f GROUP BY f.type")
-    List<Object[]> getFineCountsByType();
-
-    // Check if client has replacement fines (tool loss)
-    @Query("SELECT COUNT(f) > 0 FROM FineEntity f WHERE f.client = :client AND f.type = 'TOOL_REPLACEMENT' AND f.paid = false")
-    boolean hasUnpaidReplacementFines(@Param("client") ClientEntity client);
-
-    // Get latest fines (for dashboard/reports)
-    @Query("SELECT f FROM FineEntity f ORDER BY f.createdAt DESC")
-    List<FineEntity> findLatestFines(org.springframework.data.domain.Pageable pageable);
+    // Find fines by amount range
+    @Query("SELECT f FROM FineEntity f WHERE f.amount BETWEEN :minAmount AND :maxAmount")
+    List<FineEntity> findByAmountBetween(@Param("minAmount") BigDecimal minAmount,
+                                         @Param("maxAmount") BigDecimal maxAmount);
 }

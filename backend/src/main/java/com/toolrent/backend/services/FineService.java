@@ -120,19 +120,24 @@ public class FineService {
         return restrictions;
     }
 
-    // Obtener multas por cliente
+    // Obtener multas por cliente - VERSIÓN CORREGIDA
     public List<FineEntity> getFinesByClient(ClientEntity client) {
         try {
             if (client == null) {
+                System.out.println("Client is null, returning empty list");
                 return List.of();
             }
-            // Usar una consulta que incluya tanto paid como unpaid
-            return fineRepository.findAll().stream()
-                    .filter(fine -> fine.getClient() != null &&
-                            fine.getClient().getId().equals(client.getId()))
-                    .toList();
+
+            System.out.println("Getting fines for client ID: " + client.getId());
+
+            // Usar consulta directa del repositorio en lugar de filtrar en memoria
+            List<FineEntity> fines = fineRepository.findByClient(client);
+            System.out.println("Found " + fines.size() + " fines for client " + client.getId());
+
+            return fines;
         } catch (Exception e) {
             System.err.println("Error getting fines by client: " + e.getMessage());
+            e.printStackTrace();
             return List.of();
         }
     }
@@ -249,13 +254,18 @@ public class FineService {
         }
     }
 
-    // Obtener todas las multas
+    // Obtener todas las multas - VERSIÓN MEJORADA PARA EVITAR ERROR 500
+    @Transactional(readOnly = true)
     public List<FineEntity> getAllFines() {
         try {
-            return fineRepository.findAll();
+            System.out.println("Attempting to get all fines from repository...");
+            List<FineEntity> fines = fineRepository.findAll();
+            System.out.println("Successfully retrieved " + fines.size() + " fines");
+            return fines;
         } catch (Exception e) {
             System.err.println("Error getting all fines: " + e.getMessage());
-            return List.of();
+            e.printStackTrace();
+            return List.of(); // Retornar lista vacía en caso de error
         }
     }
 

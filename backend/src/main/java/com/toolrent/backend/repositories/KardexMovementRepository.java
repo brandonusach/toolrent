@@ -76,13 +76,13 @@ public interface KardexMovementRepository extends JpaRepository<KardexMovementEn
     @Query("SELECT k FROM KardexMovementEntity k WHERE k.tool.id = :toolId AND k.type IN ('INITIAL_STOCK', 'LOAN', 'RETURN', 'DECOMMISSION', 'RESTOCK') ORDER BY k.createdAt DESC")
     List<KardexMovementEntity> findStockMovementsByTool(@Param("toolId") Long toolId);
 
-    // Get last movement for a tool (to check stock consistency)
-    @Query("SELECT k FROM KardexMovementEntity k WHERE k.tool.id = :toolId ORDER BY k.createdAt DESC LIMIT 1")
-    KardexMovementEntity findLastMovementByTool(@Param("toolId") Long toolId);
+    // Get last movement for a tool (to check stock consistency) - CORREGIDO para JPA estándar
+    @Query("SELECT k FROM KardexMovementEntity k WHERE k.tool.id = :toolId ORDER BY k.createdAt DESC")
+    List<KardexMovementEntity> findLastMovementByTool(@Param("toolId") Long toolId);
 
-    // Verify stock consistency for a tool
-    @Query("SELECT k.stockAfter FROM KardexMovementEntity k WHERE k.tool.id = :toolId ORDER BY k.createdAt DESC LIMIT 1")
-    Integer getLastStockByTool(@Param("toolId") Long toolId);
+    // Verify stock consistency for a tool - CORREGIDO para JPA estándar
+    @Query("SELECT k.stockAfter FROM KardexMovementEntity k WHERE k.tool.id = :toolId ORDER BY k.createdAt DESC")
+    List<Integer> getLastStockByToolList(@Param("toolId") Long toolId);
 
     // Get movements that increased stock
     @Query("SELECT k FROM KardexMovementEntity k WHERE k.type IN ('INITIAL_STOCK', 'RETURN', 'RESTOCK') ORDER BY k.createdAt DESC")

@@ -4,6 +4,7 @@ import com.toolrent.backend.entities.ToolEntity;
 import com.toolrent.backend.entities.ToolInstanceEntity;
 import com.toolrent.backend.repositories.ToolRepository;
 import com.toolrent.backend.repositories.CategoryRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,13 +18,13 @@ public class ToolService {
 
     private final ToolRepository toolRepository;
     private final CategoryRepository categoryRepository;
-    private final ToolInstanceService toolInstanceService;
 
-    public ToolService(ToolRepository toolRepository, CategoryRepository categoryRepository,
-                       ToolInstanceService toolInstanceService) {
+    @Autowired(required = false) // Hacer la dependencia opcional para evitar dependencias circulares
+    private ToolInstanceService toolInstanceService;
+
+    public ToolService(ToolRepository toolRepository, CategoryRepository categoryRepository) {
         this.toolRepository = toolRepository;
         this.categoryRepository = categoryRepository;
-        this.toolInstanceService = toolInstanceService;
     }
 
     // Get all tools
@@ -36,30 +37,52 @@ public class ToolService {
         return toolRepository.findById(id);
     }
 
-    // Create new tool (RF1.1 implementation) - MODIFICADO
+    // Create new tool (RF1.1 implementation) - VERSIÓN CORREGIDA PARA INSTANCIAS
     @Transactional
     public ToolEntity createTool(ToolEntity tool) {
-        // Validate required fields according to business rules
-        validateToolForCreation(tool);
-
-        // Set initial status to AVAILABLE
-        tool.setStatus(ToolEntity.ToolStatus.AVAILABLE);
-
-        // Set current stock equal to initial stock when creating
-        tool.setCurrentStock(tool.getInitialStock());
-
-        // Save the tool first
-        ToolEntity savedTool = toolRepository.save(tool);
-
-        // AGREGAR: Create instances automatically based on initial stock
         try {
-            toolInstanceService.createInstances(savedTool, tool.getInitialStock());
-        } catch (Exception e) {
-            // If instance creation fails, rollback tool creation
-            throw new RuntimeException("Failed to create tool instances: " + e.getMessage());
-        }
+            System.out.println("Starting tool creation for: " + tool.getName() + " with quantity: " + tool.getInitialStock());
 
-        return savedTool;
+            // Validate required fields according to business rules
+            validateToolForCreation(tool);
+
+            // Set initial status to AVAILABLE
+            tool.setStatus(ToolEntity.ToolStatus.AVAILABLE);
+
+            // Set current stock equal to initial stock when creating
+            if (tool.getInitialStock() == null) {
+                tool.setInitialStock(1); // Default value
+            }
+            tool.setCurrentStock(tool.getInitialStock());
+
+            System.out.println("Saving tool to database...");
+            // Save the tool first
+            ToolEntity savedTool = toolRepository.save(tool);
+            System.out.println("Tool saved with ID: " + savedTool.getId());
+
+            // Create individual instances for inventory tracking
+            try {
+                if (toolInstanceService != null) {
+                    System.out.println("Creating " + tool.getInitialStock() + " individual tool instances...");
+                    toolInstanceService.createInstances(savedTool, tool.getInitialStock());
+                    System.out.println("Successfully created " + tool.getInitialStock() + " tool instances");
+                } else {
+                    System.out.println("ToolInstanceService not available - creating tool without individual instances");
+                    // This is acceptable - the tool can exist without individual tracking if the service is not available
+                }
+            } catch (Exception e) {
+                System.err.println("Warning: Failed to create individual tool instances: " + e.getMessage());
+                // Don't fail the entire operation - the tool entity is still valid
+                // Individual instances can be created later if needed
+            }
+
+            return savedTool;
+
+        } catch (Exception e) {
+            System.err.println("Error creating tool: " + e.getMessage());
+            e.printStackTrace();
+            throw new RuntimeException("Error al crear herramienta: " + e.getMessage());
+        }
     }
 
     // AGREGAR: Method to add more stock to existing tool
@@ -92,13 +115,30 @@ public class ToolService {
         ToolEntity tool = toolRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Tool not found with ID: " + id));
 
-        tool.setName(toolDetails.getName());
-        tool.setCategory(toolDetails.getCategory());
-        tool.setReplacementValue(toolDetails.getReplacementValue());
+        // Actualizar propiedades básicas
+        if (toolDetails.getName() != null) {
+            tool.setName(toolDetails.getName());
+        }
+        if (toolDetails.getCategory() != null) {
+            tool.setCategory(toolDetails.getCategory());
+        }
+        if (toolDetails.getReplacementValue() != null) {
+            tool.setReplacementValue(toolDetails.getReplacementValue());
+        }
 
         // Only update initial stock if provided and valid
         if (toolDetails.getInitialStock() != null && toolDetails.getInitialStock() > 0) {
             tool.setInitialStock(toolDetails.getInitialStock());
+        }
+
+        // 🔧 CORRECCIÓN: Actualizar también el stock actual y estado
+        if (toolDetails.getCurrentStock() != null) {
+            tool.setCurrentStock(toolDetails.getCurrentStock());
+        }
+
+        if (toolDetails.getStatus() != null) {
+            tool.setStatus(toolDetails.getStatus());
+            System.out.println("Tool " + tool.getName() + " status updated to: " + toolDetails.getStatus());
         }
 
         return toolRepository.save(tool);
@@ -301,6 +341,55 @@ public class ToolService {
                 tool.getName(), tool.getCategory());
         if (existingTool.isPresent()) {
             throw new RuntimeException("Tool with this name already exists in the selected category");
+        }
+    }
+
+    // 🔧 NUEVO MÉTODO: Completar reparación de herramienta
+    @Transactional
+    public ToolEntity completeRepair(Long toolId) {
+        try {
+            ToolEntity tool = toolRepository.findById(toolId)
+                    .orElseThrow(() -> new RuntimeException("Tool not found with ID: " + toolId));
+
+            if (tool.getStatus() != ToolEntity.ToolStatus.UNDER_REPAIR) {
+                throw new RuntimeException("Tool is not under repair");
+            }
+
+            // Cambiar estado de vuelta a AVAILABLE
+            tool.setStatus(ToolEntity.ToolStatus.AVAILABLE);
+
+            System.out.println("Tool " + tool.getName() + " repair completed - status changed to AVAILABLE");
+
+            return toolRepository.save(tool);
+        } catch (Exception e) {
+            System.err.println("Error completing tool repair: " + e.getMessage());
+            throw new RuntimeException("Error al completar reparación: " + e.getMessage());
+        }
+    }
+
+    // 🔧 NUEVO MÉTODO: Dar de baja herramienta completamente
+    @Transactional
+    public ToolEntity decommissionToolCompletely(Long toolId, String reason) {
+        try {
+            ToolEntity tool = toolRepository.findById(toolId)
+                    .orElseThrow(() -> new RuntimeException("Tool not found with ID: " + toolId));
+
+            // Verificar que no tenga préstamos activos
+            if (tool.getCurrentStock() < tool.getInitialStock()) {
+                throw new RuntimeException("Cannot decommission tool with active loans. Current stock: " +
+                                         tool.getCurrentStock() + "/" + tool.getInitialStock());
+            }
+
+            // Cambiar estado a DECOMMISSIONED
+            tool.setStatus(ToolEntity.ToolStatus.DECOMMISSIONED);
+            tool.setCurrentStock(0);
+
+            System.out.println("Tool " + tool.getName() + " completely decommissioned. Reason: " + reason);
+
+            return toolRepository.save(tool);
+        } catch (Exception e) {
+            System.err.println("Error decommissioning tool: " + e.getMessage());
+            throw new RuntimeException("Error al dar de baja herramienta: " + e.getMessage());
         }
     }
 }

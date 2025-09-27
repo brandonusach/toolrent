@@ -2,6 +2,7 @@ package com.toolrent.backend.services;
 
 import com.toolrent.backend.entities.*;
 import com.toolrent.backend.repositories.KardexMovementRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +17,9 @@ public class KardexMovementService {
 
     private final KardexMovementRepository kardexMovementRepository;
     private final ToolInstanceService toolInstanceService;
+
+    @Autowired
+    private ToolService toolService; // Inyección de ToolService
 
     public KardexMovementService(KardexMovementRepository kardexMovementRepository,
                                  ToolInstanceService toolInstanceService) {
@@ -294,26 +298,35 @@ public class KardexMovementService {
         return tool.getCurrentStock().equals(availableInstances.intValue());
     }
 
-    // MEJORA: Auditoría completa de consistencia
+    // MEJORA: Auditoría completa de consistencia - CORREGIDO
     @Transactional(readOnly = true)
     public KardexAuditReport generateAuditReport(Long toolId) {
-        ToolEntity tool = getToolById(toolId); // Asumir método existe
+        try {
+            ToolEntity tool = getToolById(toolId);
 
-        // Obtener estadísticas de instancias
-        ToolInstanceService.ToolInstanceStats instanceStats =
-                toolInstanceService.getToolInstanceStats(toolId);
+            // Obtener estadísticas de instancias
+            ToolInstanceService.ToolInstanceStats instanceStats =
+                    toolInstanceService.getToolInstanceStats(toolId);
 
-        // Obtener último stock del kardex
-        Integer lastKardexStock = kardexMovementRepository.getLastStockByTool(toolId);
+            // Obtener último stock del kardex - CORREGIDO para usar lista
+            Integer lastKardexStock = null;
+            List<Integer> stockList = kardexMovementRepository.getLastStockByToolList(toolId);
+            if (!stockList.isEmpty()) {
+                lastKardexStock = stockList.get(0); // Tomar el primer elemento (más reciente)
+            }
 
-        // Generar reporte
-        return new KardexAuditReport(
-                tool,
-                instanceStats,
-                lastKardexStock,
-                verifyStockConsistency(tool),
-                getMovementHistoryByTool(toolId)
-        );
+            // Generar reporte
+            return new KardexAuditReport(
+                    tool,
+                    instanceStats,
+                    lastKardexStock,
+                    verifyStockConsistency(tool),
+                    getMovementHistoryByTool(toolId)
+            );
+        } catch (Exception e) {
+            System.err.println("Error generating audit report: " + e.getMessage());
+            throw new RuntimeException("Error al generar reporte de auditoría: " + e.getMessage());
+        }
     }
 
     // ========== MÉTODOS DE UTILIDAD ==========
@@ -413,9 +426,10 @@ public class KardexMovementService {
         }
     }
 
-    // Método auxiliar para obtener tool (asumir que existe)
+    // Método auxiliar para obtener tool - CORREGIDO
     private ToolEntity getToolById(Long toolId) {
-        // Este método debería inyectar ToolService o implementar la lógica necesaria
-        throw new RuntimeException("Method not implemented - inject ToolService");
+        return toolService.getToolById(toolId)
+                .orElseThrow(() -> new RuntimeException("Tool not found with ID: " + toolId));
     }
 }
+

@@ -1,6 +1,7 @@
 package com.toolrent.backend.controllers;
 
 import com.toolrent.backend.entities.*;
+import com.toolrent.backend.dto.KardexMovementDTO;
 import com.toolrent.backend.services.KardexMovementService;
 import com.toolrent.backend.services.ToolService;
 import org.springframework.http.HttpStatus;
@@ -11,6 +12,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/kardex-movements")
@@ -203,14 +205,41 @@ public class KardexMovementController {
 
     // ========== QUERY ENDPOINTS (RF5.2 & RF5.3) ==========
 
-    // GET /api/kardex-movements - Get all movements
+    // GET /api/kardex-movements - Get all movements (CORREGIDO para evitar errores de serialización)
     @GetMapping
-    public ResponseEntity<List<KardexMovementEntity>> getAllMovements() {
+    public ResponseEntity<?> getAllMovements() {
         try {
+            System.out.println("=== DEBUG: Getting all kardex movements ===");
             List<KardexMovementEntity> movements = kardexMovementService.getAllMovements();
-            return new ResponseEntity<>(movements, HttpStatus.OK);
+            System.out.println("=== DEBUG: Found " + movements.size() + " movements ===");
+
+            // Convertir a DTOs para evitar problemas de serialización con lazy loading
+            List<KardexMovementDTO> movementDTOs = movements.stream()
+                    .map(movement -> {
+                        try {
+                            return KardexMovementDTO.fromEntity(movement);
+                        } catch (Exception e) {
+                            System.err.println("Error converting movement to DTO: " + e.getMessage());
+                            // Crear un DTO básico con información mínima en caso de error
+                            KardexMovementDTO basicDto = new KardexMovementDTO();
+                            basicDto.setId(movement.getId());
+                            basicDto.setType(movement.getType() != null ? movement.getType().toString() : "UNKNOWN");
+                            basicDto.setQuantity(movement.getQuantity());
+                            basicDto.setStockBefore(movement.getStockBefore());
+                            basicDto.setStockAfter(movement.getStockAfter());
+                            basicDto.setDescription(movement.getDescription());
+                            basicDto.setCreatedAt(movement.getCreatedAt());
+                            return basicDto;
+                        }
+                    })
+                    .collect(Collectors.toList());
+
+            System.out.println("=== DEBUG: Successfully converted " + movementDTOs.size() + " movements to DTOs ===");
+            return new ResponseEntity<>(movementDTOs, HttpStatus.OK);
         } catch (Exception e) {
-            return new ResponseEntity<>(HttpStatus.INTERNAL_SERVER_ERROR);
+            System.err.println("=== DEBUG: Error in getAllMovements: " + e.getMessage());
+            e.printStackTrace();
+            return new ResponseEntity<>("Error retrieving movements: " + e.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
@@ -232,7 +261,11 @@ public class KardexMovementController {
     public ResponseEntity<?> getMovementHistoryByTool(@PathVariable Long toolId) {
         try {
             List<KardexMovementEntity> movements = kardexMovementService.getMovementHistoryByTool(toolId);
-            return new ResponseEntity<>(movements, HttpStatus.OK);
+            // Convert entities to DTOs to avoid lazy loading issues
+            List<KardexMovementDTO> movementDTOs = movements.stream()
+                    .map(KardexMovementDTO::fromEntity)
+                    .collect(Collectors.toList());
+            return new ResponseEntity<>(movementDTOs, HttpStatus.OK);
         } catch (RuntimeException e) {
             return new ResponseEntity<>(e.getMessage(), HttpStatus.BAD_REQUEST);
         } catch (Exception e) {

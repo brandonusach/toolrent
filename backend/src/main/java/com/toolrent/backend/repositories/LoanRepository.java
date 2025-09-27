@@ -22,6 +22,10 @@ public interface LoanRepository extends JpaRepository<LoanEntity, Long> {
     @Query("SELECT COUNT(l) FROM LoanEntity l WHERE l.client = :client AND l.tool = :tool AND l.status = 'ACTIVE'")
     long countActiveLoansByClientAndTool(@Param("client") ClientEntity client, @Param("tool") ToolEntity tool);
 
+    // RF2.5: Verificar si existe préstamo activo por cliente y herramienta (método booleano)
+    @Query("SELECT CASE WHEN COUNT(l) > 0 THEN true ELSE false END FROM LoanEntity l WHERE l.client = :client AND l.tool = :tool AND l.status = 'ACTIVE'")
+    boolean existsActiveLoanByClientAndTool(@Param("client") ClientEntity client, @Param("tool") ToolEntity tool);
+
     // RF2.5: Contar préstamos activos del cliente (máximo 5)
     @Query("SELECT COUNT(l) FROM LoanEntity l WHERE l.client = :client AND l.status = 'ACTIVE'")
     long countActiveLoansByClient(@Param("client") ClientEntity client);
@@ -51,44 +55,14 @@ public interface LoanRepository extends JpaRepository<LoanEntity, Long> {
     @Query("SELECT l FROM LoanEntity l WHERE l.loanDate BETWEEN :startDate AND :endDate")
     List<LoanEntity> findByLoanDateBetween(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
-    // Buscar préstamos que deberían haberse devuelto en un rango de fechas
+    // Buscar préstamos por fecha de devolución acordada
     @Query("SELECT l FROM LoanEntity l WHERE l.agreedReturnDate BETWEEN :startDate AND :endDate")
     List<LoanEntity> findByAgreedReturnDateBetween(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
-    // Verificar si existe un préstamo activo específico
-    @Query("SELECT COUNT(l) > 0 FROM LoanEntity l WHERE l.client = :client AND l.tool = :tool AND l.status = 'ACTIVE'")
-    boolean existsActiveLoanByClientAndTool(@Param("client") ClientEntity client, @Param("tool") ToolEntity tool);
+    // Estadísticas para reportes
+    @Query("SELECT COUNT(l) FROM LoanEntity l WHERE l.loanDate BETWEEN :startDate AND :endDate")
+    long countLoansByDateRange(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
-    // Obtener préstamos ordenados por fecha de devolución acordada (más urgentes primero)
-    @Query("SELECT l FROM LoanEntity l WHERE l.status = 'ACTIVE' ORDER BY l.agreedReturnDate ASC")
-    List<LoanEntity> findActiveLoansByReturnDateAsc();
-
-    // Contar préstamos por cliente en un periodo específico
-    @Query("SELECT COUNT(l) FROM LoanEntity l WHERE l.client = :client AND l.loanDate BETWEEN :startDate AND :endDate")
-    long countLoansByClientInPeriod(@Param("client") ClientEntity client,
-                                    @Param("startDate") LocalDate startDate,
-                                    @Param("endDate") LocalDate endDate);
-
-    // MÉTODOS ESPECÍFICOS PARA EL MODELO DE INSTANCIAS:
-
-    // Obtener préstamos de un cliente con herramientas específicas
-    @Query("SELECT l FROM LoanEntity l WHERE l.client = :client AND l.tool.id IN :toolIds")
-    List<LoanEntity> findByClientAndToolIdIn(@Param("client") ClientEntity client, @Param("toolIds") List<Long> toolIds);
-
-    // Estadísticas de préstamos por herramienta
-    @Query("SELECT l.tool.name, COUNT(l), SUM(l.quantity) FROM LoanEntity l GROUP BY l.tool.name ORDER BY COUNT(l) DESC")
-    List<Object[]> findMostLoanedTools();
-
-    // Préstamos por cliente con información de la herramienta
-    @Query("SELECT l FROM LoanEntity l JOIN FETCH l.client JOIN FETCH l.tool WHERE l.client = :client ORDER BY l.loanDate DESC")
-    List<LoanEntity> findByClientWithDetails(@Param("client") ClientEntity client);
-
-    // Préstamos que vencen en un rango de fechas (para alertas)
-    @Query("SELECT l FROM LoanEntity l WHERE l.status = 'ACTIVE' AND l.agreedReturnDate BETWEEN :startDate AND :endDate ORDER BY l.agreedReturnDate ASC")
-    List<LoanEntity> findLoansDueInPeriod(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
-
-    // Top clientes con más préstamos
-    @Query("SELECT l.client.name, COUNT(l), SUM(l.quantity) FROM LoanEntity l GROUP BY l.client.name ORDER BY COUNT(l) DESC")
-    List<Object[]> findTopClientsByLoanCount();
-
+    @Query("SELECT COUNT(l) FROM LoanEntity l WHERE l.status = :status")
+    long countLoansByStatus(@Param("status") LoanEntity.LoanStatus status);
 }

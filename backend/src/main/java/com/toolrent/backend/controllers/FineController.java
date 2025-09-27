@@ -1,4 +1,4 @@
-// FineController.java - VERSION CORREGIDA
+// FineController.java - VERSION CORREGIDA PARA ERRORES 500
 package com.toolrent.backend.controllers;
 
 import com.toolrent.backend.entities.FineEntity;
@@ -29,24 +29,41 @@ public class FineController {
     private ClientService clientService;
 
     @GetMapping("/")
-    public ResponseEntity<List<FineEntity>> listFines() {
+    public ResponseEntity<?> listFines() {
         try {
+            System.out.println("Getting all fines...");
             List<FineEntity> fines = fineService.getAllFines();
+            System.out.println("Found " + fines.size() + " fines");
             return ResponseEntity.ok(fines);
         } catch (Exception e) {
             System.err.println("Error listing fines: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(List.of());
+            e.printStackTrace();
+
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", true);
+            errorResponse.put("message", "Error al obtener multas: " + e.getMessage());
+            errorResponse.put("timestamp", LocalDateTime.now());
+            errorResponse.put("data", List.of());
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<FineEntity> getFineById(@PathVariable Long id) {
+    public ResponseEntity<?> getFineById(@PathVariable Long id) {
         try {
             FineEntity fine = fineService.getFineById(id);
             return ResponseEntity.ok(fine);
         } catch (Exception e) {
             System.err.println("Error getting fine by ID: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(null);
+            e.printStackTrace();
+
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", true);
+            errorResponse.put("message", "Error al obtener multa: " + e.getMessage());
+            errorResponse.put("timestamp", LocalDateTime.now());
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
 
@@ -113,17 +130,43 @@ public class FineController {
     }
 
     @GetMapping("/client/{clientId}")
-    public ResponseEntity<List<FineEntity>> getFinesByClient(@PathVariable Long clientId) {
+    public ResponseEntity<?> getFinesByClient(@PathVariable Long clientId) {
         try {
+            System.out.println("Getting fines for client ID: " + clientId);
+
+            if (clientId == null || clientId <= 0) {
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", true);
+                errorResponse.put("message", "ID de cliente inválido");
+                errorResponse.put("data", List.of());
+                return ResponseEntity.badRequest().body(errorResponse);
+            }
+
             ClientEntity client = clientService.getClientById(clientId);
             if (client == null) {
-                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(List.of());
+                System.out.println("Client not found with ID: " + clientId);
+                Map<String, Object> errorResponse = new HashMap<>();
+                errorResponse.put("error", true);
+                errorResponse.put("message", "Cliente no encontrado");
+                errorResponse.put("data", List.of());
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(errorResponse);
             }
+
             List<FineEntity> fines = fineService.getFinesByClient(client);
+            System.out.println("Found " + fines.size() + " fines for client " + clientId);
             return ResponseEntity.ok(fines);
+
         } catch (Exception e) {
             System.err.println("Error getting fines by client: " + e.getMessage());
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(List.of());
+            e.printStackTrace();
+
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", true);
+            errorResponse.put("message", "Error al obtener multas del cliente: " + e.getMessage());
+            errorResponse.put("timestamp", LocalDateTime.now());
+            errorResponse.put("data", List.of());
+
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
         }
     }
 
