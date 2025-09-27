@@ -5,14 +5,13 @@ import {
 } from 'lucide-react';
 
 export const menuItems = [
-    { id: 'dashboard', icon: Home, label: 'Dashboard', adminOnly: false },
+    { id: 'dashboard', icon: Home, label: 'Inicio', adminOnly: false },
     { id: 'inventario', icon: Wrench, label: 'Gestión de Inventario', adminOnly: true },
     { id: 'prestamos', icon: RefreshCw, label: 'Préstamos y Devoluciones', adminOnly: false },
     { id: 'clientes', icon: Users, label: 'Gestión de Clientes', adminOnly: true },
     { id: 'tarifas', icon: DollarSign, label: 'Tarifas y Montos', adminOnly: true },
     { id: 'kardex', icon: FileText, label: 'Kardex y Movimientos', adminOnly: true },
-    { id: 'reportes', icon: BarChart3, label: 'Reportes y Consultas', adminOnly: false },
-    { id: 'usuarios', icon: Settings, label: 'Usuarios y Roles', adminOnly: true }
+    { id: 'reportes', icon: BarChart3, label: 'Reportes y Consultas', adminOnly: false }
 ];
 
 const Sidebar = ({ user, isAdmin, activeSection, setActiveSection, handleLogout }) => {

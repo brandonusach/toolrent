@@ -30,16 +30,22 @@ public interface LoanRepository extends JpaRepository<LoanEntity, Long> {
     @Query("SELECT COUNT(l) FROM LoanEntity l WHERE l.client = :client AND l.status = 'ACTIVE'")
     long countActiveLoansByClient(@Param("client") ClientEntity client);
 
-    // RF2.5: Sumar cantidad total de unidades prestadas por cliente (alternativa más precisa)
-    @Query("SELECT COALESCE(SUM(l.quantity), 0) FROM LoanEntity l WHERE l.client = :client AND l.status = 'ACTIVE'")
-    long sumActiveQuantityByClient(@Param("client") ClientEntity client);
+    // Consultas para reportes - RF6.1, RF6.2, RF6.3
+    @Query("SELECT l FROM LoanEntity l WHERE l.loanDate BETWEEN :startDate AND :endDate")
+    List<LoanEntity> findByLoanDateBetween(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
 
-    // RF6.1: Listar préstamos activos (para reportes)
-    @Query("SELECT l FROM LoanEntity l WHERE l.status = 'ACTIVE'")
+    @Query("SELECT l FROM LoanEntity l WHERE l.loanDate >= :startDate")
+    List<LoanEntity> findByLoanDateGreaterThanEqual(@Param("startDate") LocalDate startDate);
+
+    @Query("SELECT l FROM LoanEntity l WHERE l.loanDate <= :endDate")
+    List<LoanEntity> findByLoanDateLessThanEqual(@Param("endDate") LocalDate endDate);
+
+    // Consulta para préstamos activos (sin fecha de devolución real)
+    @Query("SELECT l FROM LoanEntity l WHERE l.actualReturnDate IS NULL")
     List<LoanEntity> findActiveLoans();
 
-    // RF6.1: Listar préstamos atrasados
-    @Query("SELECT l FROM LoanEntity l WHERE l.status = 'ACTIVE' AND l.agreedReturnDate < :currentDate")
+    // Consulta para préstamos atrasados
+    @Query("SELECT l FROM LoanEntity l WHERE l.actualReturnDate IS NULL AND l.agreedReturnDate < :currentDate")
     List<LoanEntity> findOverdueLoans(@Param("currentDate") LocalDate currentDate);
 
     // Buscar préstamos por cliente
@@ -48,21 +54,6 @@ public interface LoanRepository extends JpaRepository<LoanEntity, Long> {
     // Buscar préstamos por herramienta
     List<LoanEntity> findByTool(ToolEntity tool);
 
-    // Buscar préstamos por estado
+    // Buscar préstamos por estado - MÉTODO REQUERIDO POR LOANSERVICE
     List<LoanEntity> findByStatus(LoanEntity.LoanStatus status);
-
-    // Buscar préstamos en un rango de fechas
-    @Query("SELECT l FROM LoanEntity l WHERE l.loanDate BETWEEN :startDate AND :endDate")
-    List<LoanEntity> findByLoanDateBetween(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
-
-    // Buscar préstamos por fecha de devolución acordada
-    @Query("SELECT l FROM LoanEntity l WHERE l.agreedReturnDate BETWEEN :startDate AND :endDate")
-    List<LoanEntity> findByAgreedReturnDateBetween(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
-
-    // Estadísticas para reportes
-    @Query("SELECT COUNT(l) FROM LoanEntity l WHERE l.loanDate BETWEEN :startDate AND :endDate")
-    long countLoansByDateRange(@Param("startDate") LocalDate startDate, @Param("endDate") LocalDate endDate);
-
-    @Query("SELECT COUNT(l) FROM LoanEntity l WHERE l.status = :status")
-    long countLoansByStatus(@Param("status") LoanEntity.LoanStatus status);
 }

@@ -1,5 +1,4 @@
 import React from 'react';
-import { Search, Bell } from 'lucide-react';
 
 const Header = ({ user, isAdmin }) => {
     const getRoleDisplayName = () => {
@@ -26,20 +25,16 @@ const Header = ({ user, isAdmin }) => {
                     )}
                 </div>
             </div>
-            <div className="flex items-center space-x-6">
-                <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 h-5 w-5" />
-                    <input
-                        type="text"
-                        placeholder="Buscar en el panel..."
-                        className="pl-10 pr-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-orange-500 transition-all w-80"
-                    />
-                </div>
-                <div className="relative">
-                    <Bell className="h-6 w-6 text-slate-400 hover:text-white transition-colors cursor-pointer" />
-                    <span className="absolute -top-1 -right-1.5 h-4 w-4 bg-red-500 rounded-full flex items-center justify-center text-xs text-white font-bold animate-pulse">
-                        3
-                    </span>
+
+            {/* Área derecha simplificada - sin buscador ni notificaciones */}
+            <div className="flex items-center">
+                <div className="text-right">
+                    <p className="text-sm font-medium text-white">
+                        {user.firstName ? `${user.firstName} ${user.lastName}` : user.username}
+                    </p>
+                    <p className="text-xs text-slate-400">
+                        Sesión activa
+                    </p>
                 </div>
             </div>
         </header>

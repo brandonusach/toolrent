@@ -14,6 +14,7 @@ import ClientManagement from './client/ClientManagement';
 import RateManagement from './rates/RateManagement';
 import LoanManagement from './loans/LoanManagement';
 import KardexManagement from "./kardex/KardexManagement.jsx";
+import ReportManagement from "./reports/ReportManagement.jsx";
 
 const AdminPanel = () => {
     const { keycloak } = useKeycloak();
@@ -45,6 +46,7 @@ const AdminPanel = () => {
             tarifas: <RateManagement />,
             prestamos: <LoanManagement />,
             kardex: <KardexManagement />,
+            reportes: <ReportManagement />,
             dashboard: <DashboardView isAdmin={isAdmin} />,
         };
 
