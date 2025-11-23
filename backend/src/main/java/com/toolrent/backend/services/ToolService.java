@@ -1,10 +1,13 @@
 package com.toolrent.backend.services;
 
 import com.toolrent.backend.entities.ToolEntity;
+import com.toolrent.backend.entities.CategoryEntity;
 import com.toolrent.backend.entities.ToolInstanceEntity;
 import com.toolrent.backend.repositories.ToolRepository;
 import com.toolrent.backend.repositories.CategoryRepository;
+import com.toolrent.backend.repositories.ToolInstanceRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,199 +16,375 @@ import java.util.List;
 import java.util.Optional;
 
 @Service
-@Transactional
 public class ToolService {
 
-    private final ToolRepository toolRepository;
-    private final CategoryRepository categoryRepository;
+    @Autowired
+    private ToolRepository toolRepository;
 
-    @Autowired(required = false) // Hacer la dependencia opcional para evitar dependencias circulares
-    private ToolInstanceService toolInstanceService;
+    @Autowired
+    private CategoryRepository categoryRepository;
 
-    public ToolService(ToolRepository toolRepository, CategoryRepository categoryRepository) {
-        this.toolRepository = toolRepository;
-        this.categoryRepository = categoryRepository;
-    }
+    @Autowired
+    private ToolInstanceRepository toolInstanceRepository;
 
-    // Get all tools
+    @Autowired
+    @Lazy
+    private KardexMovementService kardexMovementService;
+
+    // Constantes de validación
+    private static final BigDecimal MIN_REPLACEMENT_VALUE = new BigDecimal("1000");
+    private static final BigDecimal MAX_REPLACEMENT_VALUE = new BigDecimal("1000000");
+    private static final BigDecimal MIN_RENTAL_RATE = new BigDecimal("1");
+    private static final BigDecimal MAX_RENTAL_RATE = new BigDecimal("10000");
+    private static final int MIN_STOCK = 1;
+    private static final int MAX_STOCK = 999;
+    private static final int MIN_NAME_LENGTH = 2;
+    private static final int MAX_NAME_LENGTH = 100;
+
+    // Get all tools WITH categories
     public List<ToolEntity> getAllTools() {
-        return toolRepository.findAll();
+        return toolRepository.findAllWithCategories();
     }
 
-    // Get tool by ID
+    // Get tool by ID WITH category
     public Optional<ToolEntity> getToolById(Long id) {
-        return toolRepository.findById(id);
+        return toolRepository.findByIdWithCategory(id);
     }
 
-    // Create new tool (RF1.1 implementation) - VERSIÓN CORREGIDA PARA INSTANCIAS
+    // Validar datos de herramienta
+    private void validateToolData(ToolEntity tool) {
+        // Validar nombre
+        if (tool.getName() == null || tool.getName().trim().isEmpty()) {
+            throw new IllegalArgumentException("El nombre de la herramienta es requerido");
+        }
+
+        String trimmedName = tool.getName().trim();
+        if (trimmedName.length() < MIN_NAME_LENGTH || trimmedName.length() > MAX_NAME_LENGTH) {
+            throw new IllegalArgumentException(
+                    String.format("El nombre debe tener entre %d y %d caracteres", MIN_NAME_LENGTH, MAX_NAME_LENGTH)
+            );
+        }
+
+        // Validar categoría
+        if (tool.getCategory() == null || tool.getCategory().getId() == null) {
+            throw new IllegalArgumentException("La categoría es requerida");
+        }
+
+        // Validar stock inicial
+        if (tool.getInitialStock() == null) {
+            throw new IllegalArgumentException("El stock inicial es requerido");
+        }
+        if (tool.getInitialStock() < MIN_STOCK || tool.getInitialStock() > MAX_STOCK) {
+            throw new IllegalArgumentException(
+                    String.format("El stock inicial debe estar entre %d y %d", MIN_STOCK, MAX_STOCK)
+            );
+        }
+
+        // Validar valor de reposición
+        if (tool.getReplacementValue() == null) {
+            throw new IllegalArgumentException("El valor de reposición es requerido");
+        }
+        if (tool.getReplacementValue().compareTo(MIN_REPLACEMENT_VALUE) < 0) {
+            throw new IllegalArgumentException(
+                    String.format("El valor de reposición debe ser al menos $%s",
+                            MIN_REPLACEMENT_VALUE.toPlainString())
+            );
+        }
+        if (tool.getReplacementValue().compareTo(MAX_REPLACEMENT_VALUE) > 0) {
+            throw new IllegalArgumentException(
+                    String.format("El valor de reposición no puede exceder $%s",
+                            MAX_REPLACEMENT_VALUE.toPlainString())
+            );
+        }
+    }
+
+    // Create new tool
     @Transactional
     public ToolEntity createTool(ToolEntity tool) {
-        try {
-            System.out.println("Starting tool creation for: " + tool.getName() + " with quantity: " + tool.getInitialStock());
+        // Validar datos
+        validateToolData(tool);
 
-            // Validate required fields according to business rules
-            validateToolForCreation(tool);
+        // Limpiar nombre
+        tool.setName(tool.getName().trim());
 
-            // Set initial status to AVAILABLE
-            tool.setStatus(ToolEntity.ToolStatus.AVAILABLE);
+        // Load full category from database
+        CategoryEntity category = categoryRepository.findById(tool.getCategory().getId())
+                .orElseThrow(() -> new IllegalArgumentException("Categoría no encontrada"));
 
-            // Set current stock equal to initial stock when creating
-            if (tool.getInitialStock() == null) {
-                tool.setInitialStock(1); // Default value
-            }
-            tool.setCurrentStock(tool.getInitialStock());
+        tool.setCategory(category);
 
-            System.out.println("Saving tool to database...");
-            // Save the tool first
-            ToolEntity savedTool = toolRepository.save(tool);
-            System.out.println("Tool saved with ID: " + savedTool.getId());
-
-            // Create individual instances for inventory tracking
-            try {
-                if (toolInstanceService != null) {
-                    System.out.println("Creating " + tool.getInitialStock() + " individual tool instances...");
-                    toolInstanceService.createInstances(savedTool, tool.getInitialStock());
-                    System.out.println("Successfully created " + tool.getInitialStock() + " tool instances");
-                } else {
-                    System.out.println("ToolInstanceService not available - creating tool without individual instances");
-                    // This is acceptable - the tool can exist without individual tracking if the service is not available
-                }
-            } catch (Exception e) {
-                System.err.println("Warning: Failed to create individual tool instances: " + e.getMessage());
-                // Don't fail the entire operation - the tool entity is still valid
-                // Individual instances can be created later if needed
-            }
-
-            return savedTool;
-
-        } catch (Exception e) {
-            System.err.println("Error creating tool: " + e.getMessage());
-            e.printStackTrace();
-            throw new RuntimeException("Error al crear herramienta: " + e.getMessage());
-        }
-    }
-
-    // AGREGAR: Method to add more stock to existing tool
-    @Transactional
-    public ToolEntity addToolStock(Long id, Integer additionalQuantity) {
-        ToolEntity tool = toolRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Tool not found with ID: " + id));
-
-        if (additionalQuantity == null || additionalQuantity <= 0) {
-            throw new RuntimeException("Additional quantity must be greater than 0");
+        // Validar duplicados: mismo nombre y categoría
+        Optional<ToolEntity> existingTool = toolRepository.findByNameIgnoreCaseAndCategory(tool.getName(), category);
+        if (existingTool.isPresent()) {
+            throw new IllegalArgumentException(
+                    String.format("Ya existe una herramienta con el nombre '%s' en la categoría '%s'",
+                            tool.getName(), category.getName())
+            );
         }
 
-        // Update stock numbers
-        tool.setInitialStock(tool.getInitialStock() + additionalQuantity);
-        tool.setCurrentStock(tool.getCurrentStock() + additionalQuantity);
+        // Set initial values
+        tool.setCurrentStock(tool.getInitialStock());
+        tool.setStatus(ToolEntity.ToolStatus.AVAILABLE);
 
-        // Create new instances
-        toolInstanceService.createInstances(tool, additionalQuantity);
+        // Save tool
+        ToolEntity savedTool = toolRepository.save(tool);
 
-        // Update status to AVAILABLE if it was DECOMMISSIONED
-        if (tool.getStatus() == ToolEntity.ToolStatus.DECOMMISSIONED) {
-            tool.setStatus(ToolEntity.ToolStatus.AVAILABLE);
+        // Create tool instances
+        for (int i = 0; i < savedTool.getInitialStock(); i++) {
+            ToolInstanceEntity instance = new ToolInstanceEntity();
+            instance.setTool(savedTool);
+            instance.setStatus(ToolInstanceEntity.ToolInstanceStatus.AVAILABLE);
+            toolInstanceRepository.save(instance);
         }
 
-        return toolRepository.save(tool);
+        // Registrar movimiento inicial en el kardex
+        kardexMovementService.createInitialStockMovement(
+                savedTool,
+                savedTool.getInitialStock()
+        );
+
+        // Reload tool with category to return complete object
+        return toolRepository.findByIdWithCategory(savedTool.getId())
+                .orElse(savedTool);
     }
 
     // Update tool
+    @Transactional
     public ToolEntity updateTool(Long id, ToolEntity toolDetails) {
-        ToolEntity tool = toolRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Tool not found with ID: " + id));
+        ToolEntity tool = toolRepository.findByIdWithCategory(id)
+                .orElseThrow(() -> new IllegalArgumentException("Herramienta no encontrada con ID: " + id));
 
-        // Actualizar propiedades básicas
-        if (toolDetails.getName() != null) {
-            tool.setName(toolDetails.getName());
-        }
-        if (toolDetails.getCategory() != null) {
-            tool.setCategory(toolDetails.getCategory());
-        }
-        if (toolDetails.getReplacementValue() != null) {
-            tool.setReplacementValue(toolDetails.getReplacementValue());
+        // Validar nombre
+        if (toolDetails.getName() == null || toolDetails.getName().trim().isEmpty()) {
+            throw new IllegalArgumentException("El nombre de la herramienta es requerido");
         }
 
-        // Only update initial stock if provided and valid
-        if (toolDetails.getInitialStock() != null && toolDetails.getInitialStock() > 0) {
-            tool.setInitialStock(toolDetails.getInitialStock());
+        String trimmedName = toolDetails.getName().trim();
+        if (trimmedName.length() < MIN_NAME_LENGTH || trimmedName.length() > MAX_NAME_LENGTH) {
+            throw new IllegalArgumentException(
+                    String.format("El nombre debe tener entre %d y %d caracteres", MIN_NAME_LENGTH, MAX_NAME_LENGTH)
+            );
         }
 
-        // 🔧 CORRECCIÓN: Actualizar también el stock actual y estado
-        if (toolDetails.getCurrentStock() != null) {
-            tool.setCurrentStock(toolDetails.getCurrentStock());
+        // Validar valor de reposición
+        if (toolDetails.getReplacementValue() == null) {
+            throw new IllegalArgumentException("El valor de reposición es requerido");
+        }
+        if (toolDetails.getReplacementValue().compareTo(MIN_REPLACEMENT_VALUE) < 0) {
+            throw new IllegalArgumentException(
+                    String.format("El valor de reposición debe ser al menos $%s",
+                            MIN_REPLACEMENT_VALUE.toPlainString())
+            );
+        }
+        if (toolDetails.getReplacementValue().compareTo(MAX_REPLACEMENT_VALUE) > 0) {
+            throw new IllegalArgumentException(
+                    String.format("El valor de reposición no puede exceder $%s",
+                            MAX_REPLACEMENT_VALUE.toPlainString())
+            );
         }
 
-        if (toolDetails.getStatus() != null) {
-            tool.setStatus(toolDetails.getStatus());
-            System.out.println("Tool " + tool.getName() + " status updated to: " + toolDetails.getStatus());
+        // Validar tarifa de arriendo
+        if (toolDetails.getRentalRate() == null) {
+            throw new IllegalArgumentException("La tarifa de arriendo es requerida");
+        }
+        if (toolDetails.getRentalRate().compareTo(MIN_RENTAL_RATE) < 0) {
+            throw new IllegalArgumentException(
+                    String.format("La tarifa de arriendo debe ser al menos $%s",
+                            MIN_RENTAL_RATE.toPlainString())
+            );
+        }
+        if (toolDetails.getRentalRate().compareTo(MAX_RENTAL_RATE) > 0) {
+            throw new IllegalArgumentException(
+                    String.format("La tarifa de arriendo no puede exceder $%s",
+                            MAX_RENTAL_RATE.toPlainString())
+            );
         }
 
-        return toolRepository.save(tool);
+        // Update basic fields
+        tool.setName(trimmedName);
+        tool.setReplacementValue(toolDetails.getReplacementValue());
+        tool.setRentalRate(toolDetails.getRentalRate());
+
+        // Update category if changed
+        if (toolDetails.getCategory() != null && toolDetails.getCategory().getId() != null) {
+            CategoryEntity category = categoryRepository.findById(toolDetails.getCategory().getId())
+                    .orElseThrow(() -> new IllegalArgumentException("Categoría no encontrada"));
+            tool.setCategory(category);
+        }
+
+        // Validar duplicados: mismo nombre y categoría (excepto esta misma herramienta)
+        Optional<ToolEntity> existingTool = toolRepository.findByNameIgnoreCaseAndCategory(trimmedName, tool.getCategory());
+        if (existingTool.isPresent() && !existingTool.get().getId().equals(id)) {
+            throw new IllegalArgumentException(
+                    String.format("Ya existe otra herramienta con el nombre '%s' en la categoría '%s'",
+                            trimmedName, tool.getCategory().getName())
+            );
+        }
+
+        // Save
+        ToolEntity savedTool = toolRepository.save(tool);
+
+        // Reload tool with category to return complete object
+        return toolRepository.findByIdWithCategory(savedTool.getId())
+                .orElse(savedTool);
     }
 
-    // Decommission tool units (RF1.2 - only for Administrators)
-    public ToolEntity decommissionTool(Long id, Integer quantity) {
-        ToolEntity tool = toolRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Tool not found with ID: " + id));
-
-        // Validate quantity
-        if (quantity == null || quantity <= 0) {
-            throw new RuntimeException("Quantity must be greater than 0");
-        }
-
-        if (quantity > tool.getCurrentStock()) {
-            throw new RuntimeException("Cannot decommission more units than available in stock");
-        }
-
-        // Get available instances and decommission them
-        try {
-            toolInstanceService.decommissionMultipleInstances(id, quantity);
-        } catch (Exception e) {
-            throw new RuntimeException("Failed to decommission instances: " + e.getMessage());
-        }
-
-        // Reduce stock by the specified quantity
-        int newStock = tool.getCurrentStock() - quantity;
-        tool.setCurrentStock(newStock);
-
-        // If all units are decommissioned, change status to DECOMMISSIONED
-        if (newStock == 0) {
-            tool.setStatus(ToolEntity.ToolStatus.DECOMMISSIONED);
-        }
-
-        return toolRepository.save(tool);
-    }
-
-    // Decommission all units of a tool (convenience method)
-    public ToolEntity decommissionAllUnits(Long id) {
-        ToolEntity tool = toolRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Tool not found with ID: " + id));
-
-        return decommissionTool(id, tool.getCurrentStock());
-    }
-
-    // Delete tool (physical deletion - use with caution)
+    // Delete tool
     @Transactional
     public void deleteTool(Long id) {
         ToolEntity tool = toolRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Tool not found with ID: " + id));
+                .orElseThrow(() -> new IllegalArgumentException("Herramienta no encontrada con ID: " + id));
 
         // Delete all instances first
-        toolInstanceService.deleteAllInstancesByTool(id);
+        toolInstanceRepository.deleteByToolId(id);
 
-        // Then delete the tool
+        // Delete tool
         toolRepository.delete(tool);
+    }
+
+    // Add stock
+    @Transactional
+    public ToolEntity addToolStock(Long toolId, Integer quantity) {
+        if (quantity == null || quantity <= 0) {
+            throw new IllegalArgumentException("La cantidad debe ser mayor a 0");
+        }
+
+        if (quantity > MAX_STOCK) {
+            throw new IllegalArgumentException(
+                    String.format("La cantidad no puede exceder %d unidades", MAX_STOCK)
+            );
+        }
+
+        ToolEntity tool = toolRepository.findByIdWithCategory(toolId)
+                .orElseThrow(() -> new IllegalArgumentException("Herramienta no encontrada con ID: " + toolId));
+
+        // Validar que no exceda el máximo de stock
+        int newInitialStock = tool.getInitialStock() + quantity;
+        int newCurrentStock = tool.getCurrentStock() + quantity;
+
+        if (newInitialStock > MAX_STOCK) {
+            throw new IllegalArgumentException(
+                    String.format("El stock total no puede exceder %d unidades. Stock actual: %d",
+                            MAX_STOCK, tool.getInitialStock())
+            );
+        }
+
+        // Update stocks
+        tool.setInitialStock(newInitialStock);
+        tool.setCurrentStock(newCurrentStock);
+
+        // 🔧 CORRECCIÓN: Actualizar estado a AVAILABLE cuando se agrega stock
+        // Si la herramienta estaba en LOANED o DECOMMISSIONED, ahora tiene stock disponible
+        if (newCurrentStock > 0 && (tool.getStatus() == ToolEntity.ToolStatus.LOANED ||
+                                     tool.getStatus() == ToolEntity.ToolStatus.DECOMMISSIONED)) {
+            tool.setStatus(ToolEntity.ToolStatus.AVAILABLE);
+            System.out.println("Tool " + tool.getName() + " status changed to AVAILABLE after adding stock (new stock: " + newCurrentStock + ")");
+        }
+
+        // Create new instances
+        for (int i = 0; i < quantity; i++) {
+            ToolInstanceEntity instance = new ToolInstanceEntity();
+            instance.setTool(tool);
+            instance.setStatus(ToolInstanceEntity.ToolInstanceStatus.AVAILABLE);
+            toolInstanceRepository.save(instance);
+        }
+
+        ToolEntity savedTool = toolRepository.save(tool);
+
+        // Create Kardex movement for restock
+        try {
+            String description = String.format("Reposición de stock desde gestión de inventario - %d unidad(es)", quantity);
+            kardexMovementService.createRestockMovement(savedTool, quantity, description);
+        } catch (Exception e) {
+            System.err.println("Error creando movimiento Kardex para reposición: " + e.getMessage());
+            // No lanzar excepción para no afectar el proceso principal
+        }
+
+        // Reload tool with category to return complete object
+        return toolRepository.findByIdWithCategory(savedTool.getId())
+                .orElse(savedTool);
+    }
+
+    // Decommission tool
+    @Transactional
+    public ToolEntity decommissionTool(Long toolId, Integer quantity) {
+        if (quantity == null || quantity <= 0) {
+            throw new IllegalArgumentException("La cantidad debe ser mayor a 0");
+        }
+
+        ToolEntity tool = toolRepository.findByIdWithCategory(toolId)
+                .orElseThrow(() -> new IllegalArgumentException("Herramienta no encontrada con ID: " + toolId));
+
+        // Get available instances
+        List<ToolInstanceEntity> availableInstances = toolInstanceRepository
+                .findByToolAndStatus(tool, ToolInstanceEntity.ToolInstanceStatus.AVAILABLE);
+
+        if (availableInstances.size() < quantity) {
+            throw new IllegalArgumentException(
+                    String.format("No hay suficientes instancias disponibles para dar de baja. Disponibles: %d, Solicitadas: %d",
+                            availableInstances.size(), quantity)
+            );
+        }
+
+        // Collect instance IDs to decommission
+        List<Long> instanceIds = new java.util.ArrayList<>();
+
+        // Decommission instances
+        for (int i = 0; i < quantity; i++) {
+            ToolInstanceEntity instance = availableInstances.get(i);
+            instanceIds.add(instance.getId());
+            instance.setStatus(ToolInstanceEntity.ToolInstanceStatus.DECOMMISSIONED);
+            toolInstanceRepository.save(instance);
+        }
+
+        // Update current stock
+        tool.setCurrentStock(tool.getCurrentStock() - quantity);
+
+        ToolEntity savedTool = toolRepository.save(tool);
+
+        // Create Kardex movement for decommission - MEJORADO
+        String description = String.format("Baja de herramienta desde gestión de inventario - %d unidad(es)", quantity);
+        System.out.println("=== DEBUG: Registrando movimiento DECOMMISSION en kardex para herramienta ID " + savedTool.getId() + " ===");
+        kardexMovementService.createDecommissionMovement(savedTool, quantity, description, instanceIds);
+        System.out.println("=== DEBUG: Movimiento DECOMMISSION registrado exitosamente ===");
+
+        // Reload tool with category to return complete object
+        return toolRepository.findByIdWithCategory(savedTool.getId())
+                .orElse(savedTool);
+    }
+
+    // Delete tool instance and update stock
+    @Transactional
+    public void deleteToolInstanceAndUpdateStock(Long instanceId) {
+        ToolInstanceEntity instance = toolInstanceRepository.findById(instanceId)
+                .orElseThrow(() -> new IllegalArgumentException("Instancia de herramienta no encontrada con ID: " + instanceId));
+
+        ToolEntity tool = instance.getTool();
+
+        // Only decrease stock if instance was AVAILABLE
+        if (instance.getStatus() == ToolInstanceEntity.ToolInstanceStatus.AVAILABLE) {
+            tool.setCurrentStock(tool.getCurrentStock() - 1);
+            tool.setInitialStock(tool.getInitialStock() - 1);
+            toolRepository.save(tool);
+        }
+
+        // Delete instance
+        toolInstanceRepository.delete(instance);
+    }
+
+    // Search tools by name
+    public List<ToolEntity> searchToolsByName(String name) {
+        if (name == null || name.trim().isEmpty()) {
+            throw new IllegalArgumentException("El término de búsqueda no puede estar vacío");
+        }
+        return toolRepository.findByNameContainingIgnoreCase(name.trim());
     }
 
     // Get tools by category
     public List<ToolEntity> getToolsByCategory(Long categoryId) {
-        return toolRepository.findByCategoryId(categoryId);
-    }
-
-    // Get tools by status
-    public List<ToolEntity> getToolsByStatus(ToolEntity.ToolStatus status) {
-        return toolRepository.findByStatus(status);
+        CategoryEntity category = categoryRepository.findById(categoryId)
+                .orElseThrow(() -> new IllegalArgumentException("Categoría no encontrada"));
+        return toolRepository.findByCategory(category);
     }
 
     // Get available tools
@@ -213,183 +392,11 @@ public class ToolService {
         return toolRepository.findAvailableTools();
     }
 
-    // Search tools by name
-    public List<ToolEntity> searchToolsByName(String name) {
-        return toolRepository.findByNameContainingIgnoreCase(name);
-    }
-
-    // Get tools with low stock
+    // Get low stock tools
     public List<ToolEntity> getLowStockTools(Integer threshold) {
-        return toolRepository.findLowStockTools(threshold != null ? threshold : 5);
-    }
-
-    // Check if tool name exists
-    public boolean toolNameExists(String name) {
-        return toolRepository.existsByNameIgnoreCase(name);
-    }
-    @Transactional
-    public void deleteToolInstanceAndUpdateStock(Long instanceId) {
-        // 1. Obtener la instancia antes de eliminarla (necesitamos la info de la herramienta)
-        ToolInstanceEntity instance = toolInstanceService.getInstanceById(instanceId);
-        Long toolId = instance.getTool().getId();
-
-        // 2. Eliminar la instancia
-        toolInstanceService.deleteInstance(instanceId);
-
-        // 3. Obtener la herramienta y actualizar su stock
-        ToolEntity tool = toolRepository.findById(toolId)
-                .orElseThrow(() -> new RuntimeException("Tool not found with ID: " + toolId));
-
-        // 4. Reducir el stock actual en 1
-        tool.setCurrentStock(tool.getCurrentStock() - 1);
-
-        // 5. Actualizar estado si es necesario
-        if (tool.getCurrentStock() <= 0) {
-            tool.setStatus(ToolEntity.ToolStatus.DECOMMISSIONED);
+        if (threshold == null || threshold < 0) {
+            throw new IllegalArgumentException("El umbral debe ser un número positivo");
         }
-
-        // 6. Guardar los cambios
-        toolRepository.save(tool);
-
-        System.out.println("=== DEBUG: Instance deleted and stock updated. New stock: " + tool.getCurrentStock() + " ===");
-    }
-    // MODIFICAR: Update tool stock should sync with instances
-    @Transactional
-    public ToolEntity updateToolStock(Long id, Integer newStock) {
-        ToolEntity tool = toolRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Tool not found with ID: " + id));
-
-        if (newStock < 0) {
-            throw new RuntimeException("Stock cannot be negative");
-        }
-
-        // Get current available instances count
-        Long currentAvailable = toolInstanceService.getAvailableCount(id);
-
-        if (newStock > currentAvailable) {
-            // Need to create more instances
-            int instancesToCreate = newStock - currentAvailable.intValue();
-            toolInstanceService.createInstances(tool, instancesToCreate);
-        }
-
-        tool.setCurrentStock(newStock);
-
-        // Update status based on stock
-        if (newStock == 0 && tool.getStatus() == ToolEntity.ToolStatus.AVAILABLE) {
-            tool.setStatus(ToolEntity.ToolStatus.LOANED);
-        } else if (newStock > 0 && tool.getStatus() == ToolEntity.ToolStatus.LOANED) {
-            tool.setStatus(ToolEntity.ToolStatus.AVAILABLE);
-        }
-
-        return toolRepository.save(tool);
-    }
-
-    // Update tool status
-    public ToolEntity updateToolStatus(Long id, ToolEntity.ToolStatus status) {
-        ToolEntity tool = toolRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Tool not found with ID: " + id));
-
-        tool.setStatus(status);
-        return toolRepository.save(tool);
-    }
-
-    // AGREGAR: Method to synchronize stock with actual instances
-    @Transactional
-    public ToolEntity synchronizeStock(Long id) {
-        ToolEntity tool = toolRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Tool not found with ID: " + id));
-
-        Long availableCount = toolInstanceService.getAvailableCount(id);
-        tool.setCurrentStock(availableCount.intValue());
-
-        // Update status based on available instances
-        if (availableCount == 0) {
-            tool.setStatus(ToolEntity.ToolStatus.DECOMMISSIONED);
-        } else {
-            tool.setStatus(ToolEntity.ToolStatus.AVAILABLE);
-        }
-
-        return toolRepository.save(tool);
-    }
-
-    // Validation method for tool creation (Business Rules)
-    private void validateToolForCreation(ToolEntity tool) {
-        // BR: Tool can only be registered with name, category and replacement value
-        if (tool.getName() == null || tool.getName().trim().isEmpty()) {
-            throw new RuntimeException("Tool name is required");
-        }
-
-        if (tool.getCategory() == null) {
-            throw new RuntimeException("Tool category is required");
-        }
-
-        if (tool.getReplacementValue() == null || tool.getReplacementValue().compareTo(BigDecimal.ZERO) <= 0) {
-            throw new RuntimeException("Tool replacement value is required and must be greater than 0");
-        }
-
-        if (tool.getInitialStock() == null || tool.getInitialStock() <= 0) {
-            throw new RuntimeException("Initial stock is required and must be greater than 0");
-        }
-
-        // Check if category exists
-        if (!categoryRepository.existsById(tool.getCategory().getId())) {
-            throw new RuntimeException("Category does not exist");
-        }
-
-        // Optional: Check if tool name already exists in the same category
-        Optional<ToolEntity> existingTool = toolRepository.findByNameIgnoreCaseAndCategory(
-                tool.getName(), tool.getCategory());
-        if (existingTool.isPresent()) {
-            throw new RuntimeException("Tool with this name already exists in the selected category");
-        }
-    }
-
-    // 🔧 NUEVO MÉTODO: Completar reparación de herramienta
-    @Transactional
-    public ToolEntity completeRepair(Long toolId) {
-        try {
-            ToolEntity tool = toolRepository.findById(toolId)
-                    .orElseThrow(() -> new RuntimeException("Tool not found with ID: " + toolId));
-
-            if (tool.getStatus() != ToolEntity.ToolStatus.UNDER_REPAIR) {
-                throw new RuntimeException("Tool is not under repair");
-            }
-
-            // Cambiar estado de vuelta a AVAILABLE
-            tool.setStatus(ToolEntity.ToolStatus.AVAILABLE);
-
-            System.out.println("Tool " + tool.getName() + " repair completed - status changed to AVAILABLE");
-
-            return toolRepository.save(tool);
-        } catch (Exception e) {
-            System.err.println("Error completing tool repair: " + e.getMessage());
-            throw new RuntimeException("Error al completar reparación: " + e.getMessage());
-        }
-    }
-
-    // 🔧 NUEVO MÉTODO: Dar de baja herramienta completamente
-    @Transactional
-    public ToolEntity decommissionToolCompletely(Long toolId, String reason) {
-        try {
-            ToolEntity tool = toolRepository.findById(toolId)
-                    .orElseThrow(() -> new RuntimeException("Tool not found with ID: " + toolId));
-
-            // Verificar que no tenga préstamos activos
-            if (tool.getCurrentStock() < tool.getInitialStock()) {
-                throw new RuntimeException("Cannot decommission tool with active loans. Current stock: " +
-                                         tool.getCurrentStock() + "/" + tool.getInitialStock());
-            }
-
-            // Cambiar estado a DECOMMISSIONED
-            tool.setStatus(ToolEntity.ToolStatus.DECOMMISSIONED);
-            tool.setCurrentStock(0);
-
-            System.out.println("Tool " + tool.getName() + " completely decommissioned. Reason: " + reason);
-
-            return toolRepository.save(tool);
-        } catch (Exception e) {
-            System.err.println("Error decommissioning tool: " + e.getMessage());
-            throw new RuntimeException("Error al dar de baja herramienta: " + e.getMessage());
-        }
+        return toolRepository.findLowStockTools(threshold);
     }
 }

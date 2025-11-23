@@ -42,6 +42,10 @@ public class FineEntity {
     @Column(length = 500)
     private String description;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "damage_type")
+    private DamageType damageType; // Solo para multas de tipo DAMAGE_REPAIR o TOOL_REPLACEMENT
+
     @Column(nullable = false)
     private Boolean paid = false;
 
@@ -63,6 +67,11 @@ public class FineEntity {
         LATE_RETURN,        // devolución tardía
         DAMAGE_REPAIR,      // daño leve (reparación)
         TOOL_REPLACEMENT    // reposición de herramienta
+    }
+
+    public enum DamageType {
+        MINOR,          // Daño leve (reparable)
+        IRREPARABLE     // Daño irreparable (dar de baja)
     }
 
     // Business methods

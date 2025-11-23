@@ -8,12 +8,7 @@ import {
     Loader,
     Info,
     Wrench,
-    DollarSign,
-    Calendar,
-    Hash,
-    Clock,
-    User,
-    FileText
+    User
 } from 'lucide-react';
 import httpClient from "../../../../http-common";
 
@@ -109,14 +104,14 @@ const ToolAvailability = ({ toolId, quantity = 1, clientId, onAvailabilityChange
     };
 
     const getStatusColor = () => {
-        if (loading) return 'border-blue-500 bg-blue-50';
-        if (error) return 'border-red-500 bg-red-50';
-        if (!availability) return 'border-gray-500 bg-gray-50';
+        if (loading) return 'border-blue-500 bg-blue-900/30';
+        if (error) return 'border-red-500 bg-red-900/30';
+        if (!availability) return 'border-gray-500 bg-gray-700';
 
         if (availability.available && (!clientToolCheck || !clientToolCheck.hasActiveLoanForTool)) {
-            return 'border-green-500 bg-green-50';
+            return 'border-green-500 bg-green-900';
         } else {
-            return 'border-red-500 bg-red-50';
+            return 'border-red-500 bg-red-900/30';
         }
     };
 
@@ -197,11 +192,6 @@ const ToolAvailability = ({ toolId, quantity = 1, clientId, onAvailabilityChange
                             <p className="text-white font-medium">{availability.currentStock || 0}</p>
                         </div>
 
-                        <div>
-                            <span className="text-gray-400">Cantidad solicitada:</span>
-                            <p className="text-white font-medium">{availability.requestedQuantity || quantity}</p>
-                        </div>
-
                         {availability.maxAvailableQuantity && (
                             <div>
                                 <span className="text-gray-400">Máximo disponible:</span>
@@ -251,14 +241,17 @@ const ToolAvailability = ({ toolId, quantity = 1, clientId, onAvailabilityChange
                         </div>
 
                         {clientToolCheck.hasActiveLoanForTool && clientToolCheck.activeLoanId && (
-                            <div className="bg-yellow-900 border border-yellow-700 rounded-lg p-3 mt-3">
-                                <div className="flex items-center text-yellow-200 mb-2">
+                            <div className="bg-red-900 border border-red-700 rounded-lg p-3 mt-3">
+                                <div className="flex items-center text-red-200 mb-2">
                                     <AlertTriangle className="h-4 w-4 mr-2" />
-                                    <span className="font-medium">Préstamo Activo Existente</span>
+                                    <span className="font-medium">⛔ No Permitido - Préstamo Activo Existente</span>
                                 </div>
-                                <div className="text-sm text-yellow-300 space-y-1">
+                                <div className="text-sm text-red-300 space-y-1">
+                                    <div className="mb-2 p-2 bg-red-800 border border-red-600 rounded">
+                                        <strong>Un cliente no puede tener más de 1 unidad de la misma herramienta en préstamo simultáneamente.</strong>
+                                    </div>
                                     <div>
-                                        <span className="font-medium">ID del préstamo:</span> #{clientToolCheck.activeLoanId}
+                                        <span className="font-medium">ID del préstamo actual:</span> #{clientToolCheck.activeLoanId}
                                     </div>
                                     <div>
                                         <span className="font-medium">Fecha de préstamo:</span> {
@@ -270,50 +263,15 @@ const ToolAvailability = ({ toolId, quantity = 1, clientId, onAvailabilityChange
                                         new Date(clientToolCheck.agreedReturnDate).toLocaleDateString('es-ES')
                                     }
                                     </div>
-                                    <div>
-                                        <span className="font-medium">Cantidad:</span> {clientToolCheck.quantity} unidad(es)
-                                    </div>
+                                </div>
+                                <div className="mt-2 text-xs text-red-200 italic">
+                                    💡 El cliente debe devolver esta herramienta antes de poder solicitar un nuevo préstamo de la misma.
                                 </div>
                             </div>
                         )}
 
                         <div className="text-xs text-gray-400 mt-2">
                             {clientToolCheck.message}
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            {/* Resumen final */}
-            {availability && (
-                <div className={`rounded-lg p-4 border ${
-                    availability.finallyAvailable
-                        ? 'bg-green-900 border-green-700'
-                        : 'bg-red-900 border-red-700'
-                }`}>
-                    <div className="flex items-center">
-                        {availability.finallyAvailable ? (
-                            <CheckCircle className="h-5 w-5 text-green-400 mr-2" />
-                        ) : (
-                            <XCircle className="h-5 w-5 text-red-400 mr-2" />
-                        )}
-                        <div className="flex-1">
-                            <h4 className={`font-medium ${
-                                availability.finallyAvailable ? 'text-green-200' : 'text-red-200'
-                            }`}>
-                                {availability.finallyAvailable
-                                    ? 'Préstamo Posible'
-                                    : 'Préstamo No Posible'
-                                }
-                            </h4>
-                            <p className={`text-sm ${
-                                availability.finallyAvailable ? 'text-green-300' : 'text-red-300'
-                            }`}>
-                                {availability.finallyAvailable
-                                    ? 'La herramienta está disponible y el cliente puede solicitarla'
-                                    : 'No se puede procesar el préstamo en este momento'
-                                }
-                            </p>
                         </div>
                     </div>
                 </div>

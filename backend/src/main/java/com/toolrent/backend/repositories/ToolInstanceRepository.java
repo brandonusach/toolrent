@@ -21,6 +21,9 @@ public interface ToolInstanceRepository extends JpaRepository<ToolInstanceEntity
     // Find instances by tool and status
     List<ToolInstanceEntity> findByToolIdAndStatus(Long toolId, ToolInstanceStatus status);
 
+    // Find instances by tool entity and status
+    List<ToolInstanceEntity> findByToolAndStatus(com.toolrent.backend.entities.ToolEntity tool, ToolInstanceStatus status);
+
     // Count instances by tool and status
     Long countByToolIdAndStatus(Long toolId, ToolInstanceStatus status);
 

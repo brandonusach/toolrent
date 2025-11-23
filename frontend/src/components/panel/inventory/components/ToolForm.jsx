@@ -1,16 +1,16 @@
-// inventory/components/ToolForm.jsx - PURE VERSION
 import React, { useState, useEffect } from 'react';
 
-const ToolForm = ({ mode, tool, categories, onSubmit, onClose }) => {
+const ToolForm = ({ mode, tool, categories, onSubmit, onClose, existingTools }) => {
     const [formData, setFormData] = useState({
         name: '',
         categoryId: '',
-        initialStock: 1,
-        replacementValue: 0
+        initialStock: '',
+        replacementValue: 1000
     });
 
     const [loading, setLoading] = useState(false);
     const [serverErrors, setServerErrors] = useState({});
+    const [clientErrors, setClientErrors] = useState({});
 
     // Initialize form data
     useEffect(() => {
@@ -19,31 +19,83 @@ const ToolForm = ({ mode, tool, categories, onSubmit, onClose }) => {
                 name: tool.name || '',
                 categoryId: tool.category?.id || '',
                 initialStock: tool.initialStock || 1,
-                replacementValue: tool.replacementValue || 0
+                replacementValue: tool.replacementValue || 1000,
+                rentalRate: tool.rentalRate || ''
             });
         } else {
             setFormData({
                 name: '',
                 categoryId: '',
-                initialStock: 1,
-                replacementValue: 0
+                initialStock: '',
+                replacementValue: 1000,
+                rentalRate: ''
             });
         }
         setServerErrors({});
+        setClientErrors({});
     }, [mode, tool]);
+
+    // Validar duplicados en el cliente
+    const checkDuplicates = () => {
+        if (!existingTools || !formData.name || !formData.categoryId) {
+            return true;
+        }
+
+        const trimmedName = formData.name.trim().toLowerCase();
+        const categoryId = parseInt(formData.categoryId);
+
+        const duplicate = existingTools.find(t => {
+            // En modo edición, excluir la herramienta actual
+            if (mode === 'edit' && tool && t.id === tool.id) {
+                return false;
+            }
+
+            return t.name.toLowerCase() === trimmedName &&
+                   t.category?.id === categoryId;
+        });
+
+        if (duplicate) {
+            const categoryName = categories.find(c => c.id === categoryId)?.name || 'desconocida';
+            setClientErrors({
+                duplicate: `Ya existe una herramienta llamada "${formData.name}" en la categoría "${categoryName}"`
+            });
+            return false;
+        }
+
+        setClientErrors({});
+        return true;
+    };
+
+    // Limpiar errores al cambiar nombre o categoría
+    const handleNameChange = (e) => {
+        setFormData({...formData, name: e.target.value});
+        setClientErrors({});
+    };
+
+    const handleCategoryChange = (e) => {
+        setFormData({...formData, categoryId: e.target.value});
+        setClientErrors({});
+    };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
         setServerErrors({});
+        setClientErrors({});
+
+        // Validar duplicados antes de enviar
+        if (!checkDuplicates()) {
+            return;
+        }
+
         setLoading(true);
 
         try {
-            // Send raw form data to backend - let backend handle all validation
             const payload = {
-                name: formData.name.trim(),
+                name: formData.name,
                 category: { id: parseInt(formData.categoryId) },
                 initialStock: parseInt(formData.initialStock),
-                replacementValue: parseFloat(formData.replacementValue)
+                replacementValue: parseFloat(formData.replacementValue),
+                rentalRate: parseFloat(formData.rentalRate)
             };
 
             if (mode === 'edit') {
@@ -54,22 +106,17 @@ const ToolForm = ({ mode, tool, categories, onSubmit, onClose }) => {
             onClose();
         } catch (error) {
             console.error('Error submitting form:', error);
-
-            // Handle server validation errors
             if (error.response && error.response.data) {
                 const errorData = error.response.data;
-
-                // Parse server validation errors into field-specific errors
                 if (typeof errorData === 'object' && errorData.fieldErrors) {
                     setServerErrors(errorData.fieldErrors);
                 } else if (typeof errorData === 'string') {
-                    // Single error message - show as general alert
                     alert(`Error: ${errorData}`);
                 } else {
-                    alert('Error: Unknown server error');
+                    alert('Error: Error desconocido del servidor');
                 }
             } else {
-                alert(`Error: ${error.message || 'Unknown error'}`);
+                alert(`Error: ${error.message || 'Error desconocido'}`);
             }
         } finally {
             setLoading(false);
@@ -84,6 +131,18 @@ const ToolForm = ({ mode, tool, categories, onSubmit, onClose }) => {
             <div className="bg-gray-800 rounded-lg p-6 w-full max-w-md">
                 <h3 className="text-xl font-bold text-white mb-4">{title}</h3>
 
+                {/* Alert de duplicado */}
+                {clientErrors.duplicate && (
+                    <div className="mb-4 p-3 bg-red-900/30 border border-red-500 rounded-lg">
+                        <p className="text-red-400 text-sm flex items-center">
+                            <svg className="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                            </svg>
+                            {clientErrors.duplicate}
+                        </p>
+                    </div>
+                )}
+
                 <form onSubmit={handleSubmit} className="space-y-4">
                     {/* Name Field */}
                     <div>
@@ -92,10 +151,13 @@ const ToolForm = ({ mode, tool, categories, onSubmit, onClose }) => {
                         </label>
                         <input
                             type="text"
+                            required
+                            minLength={2}
+                            maxLength={100}
                             value={formData.name}
-                            onChange={(e) => setFormData({...formData, name: e.target.value})}
+                            onChange={handleNameChange}
                             className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white focus:outline-none ${
-                                serverErrors.name
+                                serverErrors.name || clientErrors.duplicate
                                     ? 'border-red-500 focus:border-red-400'
                                     : 'border-gray-600 focus:border-orange-500'
                             }`}
@@ -113,10 +175,11 @@ const ToolForm = ({ mode, tool, categories, onSubmit, onClose }) => {
                             Categoría *
                         </label>
                         <select
+                            required
                             value={formData.categoryId}
-                            onChange={(e) => setFormData({...formData, categoryId: e.target.value})}
+                            onChange={handleCategoryChange}
                             className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white focus:outline-none ${
-                                serverErrors.category
+                                serverErrors.category || clientErrors.duplicate
                                     ? 'border-red-500 focus:border-red-400'
                                     : 'border-gray-600 focus:border-orange-500'
                             }`}
@@ -141,22 +204,26 @@ const ToolForm = ({ mode, tool, categories, onSubmit, onClose }) => {
                         </label>
                         <input
                             type="number"
+                            required
                             min="1"
+                            max="999"
                             value={formData.initialStock}
                             onChange={(e) => setFormData({
                                 ...formData,
-                                initialStock: parseInt(e.target.value) || 1
+                                initialStock: e.target.value
                             })}
                             className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white focus:outline-none ${
                                 serverErrors.initialStock
                                     ? 'border-red-500 focus:border-red-400'
                                     : 'border-gray-600 focus:border-orange-500'
                             }`}
+                            placeholder="Ej: 22"
                             disabled={loading}
                         />
                         {serverErrors.initialStock && (
                             <p className="text-red-400 text-xs mt-1">{serverErrors.initialStock}</p>
                         )}
+                        <p className="text-gray-400 text-xs mt-1">Stock entre 1 y 999</p>
                     </div>
 
                     {/* Replacement Value Field */}
@@ -166,24 +233,57 @@ const ToolForm = ({ mode, tool, categories, onSubmit, onClose }) => {
                         </label>
                         <input
                             type="number"
-                            min="0"
-                            step="0.01"
+                            required
+                            min="1000"
+                            max="1000000"
+                            step="1"
                             value={formData.replacementValue}
                             onChange={(e) => setFormData({
                                 ...formData,
-                                replacementValue: parseFloat(e.target.value) || 0
+                                replacementValue: e.target.value
                             })}
                             className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white focus:outline-none ${
                                 serverErrors.replacementValue
                                     ? 'border-red-500 focus:border-red-400'
                                     : 'border-gray-600 focus:border-orange-500'
                             }`}
-                            placeholder="0.00"
+                            placeholder="1000"
                             disabled={loading}
                         />
                         {serverErrors.replacementValue && (
                             <p className="text-red-400 text-xs mt-1">{serverErrors.replacementValue}</p>
                         )}
+                        <p className="text-gray-400 text-xs mt-1">Valor entre $1.000 y $1.000.000</p>
+                    </div>
+
+                    {/* Rental Rate Field */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                            Tarifa de Arriendo (por día) *
+                        </label>
+                        <input
+                            type="number"
+                            required
+                            min="1"
+                            max="10000"
+                            step="0.01"
+                            value={formData.rentalRate}
+                            onChange={(e) => setFormData({
+                                ...formData,
+                                rentalRate: e.target.value
+                            })}
+                            className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white focus:outline-none ${
+                                serverErrors.rentalRate
+                                    ? 'border-red-500 focus:border-red-400'
+                                    : 'border-gray-600 focus:border-orange-500'
+                            }`}
+                            placeholder="100"
+                            disabled={loading}
+                        />
+                        {serverErrors.rentalRate && (
+                            <p className="text-red-400 text-xs mt-1">{serverErrors.rentalRate}</p>
+                        )}
+                        <p className="text-gray-400 text-xs mt-1">Tarifa diaria entre $1 y $10.000</p>
                     </div>
 
                     {/* Buttons */}

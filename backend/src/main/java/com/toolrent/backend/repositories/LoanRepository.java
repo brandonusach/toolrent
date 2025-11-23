@@ -41,11 +41,11 @@ public interface LoanRepository extends JpaRepository<LoanEntity, Long> {
     List<LoanEntity> findByLoanDateLessThanEqual(@Param("endDate") LocalDate endDate);
 
     // Consulta para préstamos activos (sin fecha de devolución real)
-    @Query("SELECT l FROM LoanEntity l WHERE l.actualReturnDate IS NULL")
+    @Query("SELECT l FROM LoanEntity l WHERE l.status = 'ACTIVE' AND l.actualReturnDate IS NULL")
     List<LoanEntity> findActiveLoans();
 
-    // Consulta para préstamos atrasados
-    @Query("SELECT l FROM LoanEntity l WHERE l.actualReturnDate IS NULL AND l.agreedReturnDate < :currentDate")
+    // Consulta para préstamos atrasados (activos y con fecha de retorno acordada vencida)
+    @Query("SELECT l FROM LoanEntity l WHERE l.status = 'ACTIVE' AND l.actualReturnDate IS NULL AND l.agreedReturnDate <= :currentDate")
     List<LoanEntity> findOverdueLoans(@Param("currentDate") LocalDate currentDate);
 
     // Buscar préstamos por cliente

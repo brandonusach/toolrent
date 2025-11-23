@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Package, Search, CheckCircle, AlertCircle, TrendingUp, TrendingDown } from 'lucide-react';
+import { Package, Search, CheckCircle, AlertCircle, TrendingUp, TrendingDown, ArrowUp, ArrowDown, RotateCcw, Minus, Plus, Wrench } from 'lucide-react';
 import { useKardex } from '../hooks/useKardex';
+import { formatDateTime } from '../../../../utils/dateUtils';
 
 const KardexByTool = ({ tools, selectedTool, onSelectTool, onViewDetail }) => {
     const [searchTerm, setSearchTerm] = useState('');
@@ -62,27 +63,45 @@ const KardexByTool = ({ tools, selectedTool, onSelectTool, onViewDetail }) => {
         }
     };
 
-    const formatDateTime = (dateTime) => {
-        return new Date(dateTime).toLocaleString('es-CL', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+
+    const getToolStatusBadge = (status) => {
+        const badges = {
+            AVAILABLE: 'bg-green-500/10 text-green-400 border-green-500/30',
+            LOANED: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+            IN_REPAIR: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
+            DECOMMISSIONED: 'bg-gray-500/10 text-gray-400 border-gray-500/30',
+            PARTIALLY_AVAILABLE: 'bg-orange-500/10 text-orange-400 border-orange-500/30'
+        };
+        return badges[status] || 'bg-slate-500/10 text-slate-400 border-slate-500/30';
+    };
+
+    const getToolStatusLabel = (status) => {
+        const labels = {
+            AVAILABLE: 'Disponible',
+            LOANED: 'Prestada',
+            IN_REPAIR: 'En Reparación',
+            DECOMMISSIONED: 'Dada de Baja',
+            PARTIALLY_AVAILABLE: 'Parcial'
+        };
+        return labels[status] || status;
     };
 
     const getMovementIcon = (type) => {
         switch (type) {
-            case 'LOAN':
-            case 'DECOMMISSION':
-                return <TrendingDown className="w-4 h-4 text-red-400" />;
-            case 'RETURN':
-            case 'RESTOCK':
             case 'INITIAL_STOCK':
-                return <TrendingUp className="w-4 h-4 text-green-400" />;
+                return <Plus className="w-5 h-5 text-blue-400" />;
+            case 'LOAN':
+                return <ArrowDown className="w-5 h-5 text-red-400" />;
+            case 'RETURN':
+                return <ArrowUp className="w-5 h-5 text-green-400" />;
+            case 'REPAIR':
+                return <Wrench className="w-5 h-5 text-yellow-400" />;
+            case 'DECOMMISSION':
+                return <Minus className="w-5 h-5 text-gray-400" />;
+            case 'RESTOCK':
+                return <Plus className="w-5 h-5 text-purple-400" />;
             default:
-                return <Package className="w-4 h-4 text-slate-400" />;
+                return <Package className="w-5 h-5 text-slate-400" />;
         }
     };
 
@@ -158,17 +177,10 @@ const KardexByTool = ({ tools, selectedTool, onSelectTool, onViewDetail }) => {
                     <>
                         {/* Tool Summary */}
                         <div className="bg-slate-800/50 backdrop-blur rounded-lg border border-slate-700/50 p-6">
-                            <div className="flex items-center justify-between mb-4">
+                            <div className="mb-4">
                                 <h3 className="text-xl font-bold text-slate-100">
                                     {selectedTool.name}
                                 </h3>
-                                <button
-                                    onClick={checkConsistency}
-                                    className="flex items-center gap-2 px-3 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                                >
-                                    <CheckCircle className="w-4 h-4" />
-                                    Verificar Consistencia
-                                </button>
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -190,30 +202,10 @@ const KardexByTool = ({ tools, selectedTool, onSelectTool, onViewDetail }) => {
                                 </div>
 
                                 <div className="bg-slate-700/30 p-4 rounded-lg">
-                                    <h4 className="text-sm text-slate-400 mb-1">Estado</h4>
-                                    <div className="flex items-center gap-2">
-                                        <span className={`px-2 py-1 rounded text-sm font-medium ${
-                                            selectedTool.status === 'AVAILABLE'
-                                                ? 'bg-green-500/20 text-green-400'
-                                                : 'bg-yellow-500/20 text-yellow-400'
-                                        }`}>
-                                            {selectedTool.status}
-                                        </span>
-                                        {auditReport?.isConsistent !== undefined && (
-                                            <div className="flex items-center gap-1">
-                                                {auditReport.isConsistent ? (
-                                                    <CheckCircle className="w-4 h-4 text-green-400" />
-                                                ) : (
-                                                    <AlertCircle className="w-4 h-4 text-red-400" />
-                                                )}
-                                                <span className={`text-xs ${
-                                                    auditReport.isConsistent ? 'text-green-400' : 'text-red-400'
-                                                }`}>
-                                                    {auditReport.isConsistent ? 'Consistente' : 'Inconsistente'}
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
+                                    <h4 className="text-sm text-slate-400 mb-1">Categoría</h4>
+                                    <p className="text-lg font-medium text-slate-100">
+                                        {selectedTool.category?.name || 'Sin categoría'}
+                                    </p>
                                 </div>
                             </div>
                         </div>
@@ -248,14 +240,14 @@ const KardexByTool = ({ tools, selectedTool, onSelectTool, onViewDetail }) => {
                                                 <div className="flex items-center gap-3">
                                                     {getMovementIcon(movement.type)}
                                                     <div>
-                                                        <h4 className="font-medium text-slate-100">
+                                                        <h4 className="font-medium text-slate-100 mb-1">
                                                             {getMovementLabel(movement.type)}
                                                         </h4>
                                                         <p className="text-sm text-slate-400">
                                                             {formatDateTime(movement.createdAt)}
                                                         </p>
                                                         {movement.description && (
-                                                            <p className="text-xs text-slate-500 mt-1">
+                                                            <p className={`text-xs mt-1 ${movement.type === 'DECOMMISSION' ? 'text-red-400 font-medium' : 'text-slate-500'}`}>
                                                                 {movement.description}
                                                             </p>
                                                         )}

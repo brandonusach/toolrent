@@ -9,22 +9,23 @@ import {
     Clock,
     Loader,
     Shield,
-    FileText,
-    Calendar,
     Wifi,
-    WifiOff
+    WifiOff,
+    CreditCard
 } from 'lucide-react';
 import { useLoans } from '../hooks/useLoans';
 import { useFines } from '../hooks/useFines';
 
 const ClientValidation = ({ clientId, onValidationChange }) => {
     const { getLoansByClient, checkClientRestrictions } = useLoans();
-    const { getFinesByClient, getTotalUnpaidAmount, checkClientRestrictions: checkFineRestrictions } = useFines();
+    const { getFinesByClient, getTotalUnpaidAmount, checkClientRestrictions: checkFineRestrictions, payFine } = useFines();
 
     const [validation, setValidation] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const [connectionStatus, setConnectionStatus] = useState('checking');
+    const [unpaidFines, setUnpaidFines] = useState([]);
+    const [payingFine, setPayingFine] = useState(null);
 
     useEffect(() => {
         if (clientId) {
@@ -83,16 +84,30 @@ const ClientValidation = ({ clientId, onValidationChange }) => {
                 // Fallback: intentar obtener multas manualmente
                 try {
                     clientFines = await getFinesByClient(clientId);
+                    const unpaidFinesList = clientFines.filter(f => !f.paid);
+                    setUnpaidFines(unpaidFinesList); // Guardar multas impagas
                     totalUnpaid = await getTotalUnpaidAmount(clientId);
                     fineRestrictions = {
-                        canRequestLoan: clientFines.filter(f => !f.paid).length === 0,
-                        hasUnpaidFines: clientFines.filter(f => !f.paid).length > 0,
-                        unpaidFinesCount: clientFines.filter(f => !f.paid).length,
+                        canRequestLoan: unpaidFinesList.length === 0,
+                        hasUnpaidFines: unpaidFinesList.length > 0,
+                        unpaidFinesCount: unpaidFinesList.length,
                         totalUnpaidAmount: totalUnpaid,
                         fallback: true
                     };
                 } catch (fallbackErr) {
                     console.warn('Fallback fine check also failed:', fallbackErr.message);
+                }
+            }
+
+            // Cargar multas impagas para mostrar detalles
+            if (fineRestrictions?.hasUnpaidFines) {
+                try {
+                    if (clientFines.length === 0) {
+                        clientFines = await getFinesByClient(clientId);
+                    }
+                    setUnpaidFines(clientFines.filter(f => !f.paid));
+                } catch (err) {
+                    console.warn('Error loading unpaid fines:', err);
                 }
             }
 
@@ -206,6 +221,21 @@ const ClientValidation = ({ clientId, onValidationChange }) => {
         }
     };
 
+    const handlePayFine = async (fineId) => {
+        setPayingFine(fineId);
+        setError('');
+        try {
+            await payFine(fineId);
+            // Revalidar el cliente después de pagar la multa
+            await validateClient();
+        } catch (err) {
+            console.error('Error paying fine:', err);
+            setError(err.message || 'Error al pagar la multa');
+        } finally {
+            setPayingFine(null);
+        }
+    };
+
     const generateValidationSummary = (loanRestrictions, fineRestrictions) => {
         const issues = [];
         const warnings = [];
@@ -227,9 +257,9 @@ const ClientValidation = ({ clientId, onValidationChange }) => {
             issues.push({
                 type: 'error',
                 icon: DollarSign,
-                title: 'Multas Pendientes',
-                description: `${fineRestrictions.unpaidFinesCount || 0} multa(s) por $${(fineRestrictions.totalUnpaidAmount || 0).toFixed(2)}`,
-                details: 'Debe pagar todas las multas antes de solicitar préstamos'
+                title: '🚫 Cliente Restringido - Multas Pendientes',
+                description: `Este cliente tiene ${fineRestrictions.unpaidFinesCount || 0} multa(s) por $${(fineRestrictions.totalUnpaidAmount || 0).toFixed(2)}`,
+                details: '⚠️ NO PUEDE solicitar préstamos hasta pagar todas las multas. Use el botón "Gestionar Multas" para procesar el pago.'
             });
         }
 
@@ -441,21 +471,79 @@ const ClientValidation = ({ clientId, onValidationChange }) => {
                 {validation.summary?.info?.map(item => renderValidationItem(item))}
             </div>
 
-            {/* Información sobre la fuente de datos */}
-            {(validation.dataSource || validation.emergency) && (
-                <div className="bg-blue-900 rounded-lg p-4 border border-blue-700">
-                    <h4 className="text-blue-200 font-medium mb-2">Información del Sistema:</h4>
-                    <div className="text-blue-300 text-sm space-y-1">
-                        {validation.emergency && (
-                            <p>• Validación de emergencia activada debido a errores del servidor</p>
-                        )}
-                        {validation.dataSource?.loans === 'fallback' && (
-                            <p>• Datos de préstamos obtenidos mediante validación local</p>
-                        )}
-                        {validation.dataSource?.fines === 'fallback' && (
-                            <p>• Datos de multas obtenidos mediante validación local</p>
-                        )}
-                        <p>• Estado de conexión: {connectionStatus}</p>
+            {/* Multas Impagas - Sección para pagar multas */}
+            {unpaidFines.length > 0 && (
+                <div className="bg-red-900 rounded-lg p-4 border border-red-700">
+                    <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-red-200 font-medium flex items-center">
+                            <DollarSign className="h-5 w-5 mr-2" />
+                            Multas Pendientes de Pago ({unpaidFines.length})
+                        </h4>
+                        <span className="text-red-200 font-bold text-lg">
+                            Total: ${validation.fineRestrictions?.totalUnpaidAmount?.toFixed(2) || '0.00'}
+                        </span>
+                    </div>
+                    <div className="space-y-2">
+                        {unpaidFines.map(fine => (
+                            <div key={fine.id} className="bg-red-800 rounded-lg p-3 border border-red-600">
+                                <div className="flex items-start justify-between">
+                                    <div className="flex-1">
+                                        <div className="flex items-center mb-1">
+                                            <span className={`px-2 py-0.5 rounded text-xs font-medium mr-2 ${
+                                                fine.type === 'LATE_RETURN' 
+                                                    ? 'bg-orange-900 text-orange-200 border border-orange-700' 
+                                                    : 'bg-yellow-900 text-yellow-200 border border-yellow-700'
+                                            }`}>
+                                                {fine.type === 'LATE_RETURN' ? '⏰ Atraso' : '🔧 Daño'}
+                                            </span>
+                                            <span className="text-red-100 font-bold text-lg">
+                                                ${fine.amount?.toFixed(2)}
+                                            </span>
+                                        </div>
+                                        <p className="text-red-200 text-sm mt-1">{fine.description}</p>
+                                        <div className="text-xs text-red-300 mt-2 space-y-0.5">
+                                            <div>📅 Vence: {new Date(fine.dueDate).toLocaleDateString('es-ES', {
+                                                year: 'numeric',
+                                                month: 'long',
+                                                day: 'numeric'
+                                            })}</div>
+                                            {fine.loan && (
+                                                <div>📋 Préstamo #{fine.loan.id}</div>
+                                            )}
+                                            <div>🕒 Creada: {new Date(fine.createdAt).toLocaleDateString('es-ES')}</div>
+                                        </div>
+                                    </div>
+                                    <button
+                                        onClick={() => handlePayFine(fine.id)}
+                                        disabled={payingFine === fine.id}
+                                        className="ml-3 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center text-sm font-medium shadow-lg"
+                                    >
+                                        {payingFine === fine.id ? (
+                                            <>
+                                                <Loader className="h-4 w-4 mr-1.5 animate-spin" />
+                                                Procesando...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <CreditCard className="h-4 w-4 mr-1.5" />
+                                                Pagar Multa
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    <div className="mt-3 bg-red-800 border border-red-600 rounded-lg p-3">
+                        <div className="flex items-start text-red-200 text-sm">
+                            <AlertTriangle className="h-4 w-4 mr-2 mt-0.5 flex-shrink-0" />
+                            <div>
+                                <p className="font-medium">Importante:</p>
+                                <p className="text-xs text-red-300 mt-1">
+                                    Debes pagar todas las multas pendientes para volver al estado ACTIVO y poder solicitar nuevos préstamos.
+                                </p>
+                            </div>
+                        </div>
                     </div>
                 </div>
             )}

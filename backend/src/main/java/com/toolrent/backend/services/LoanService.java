@@ -3,6 +3,7 @@ package com.toolrent.backend.services;
 
 import com.toolrent.backend.entities.*;
 import com.toolrent.backend.repositories.LoanRepository;
+import com.toolrent.backend.repositories.ToolRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -11,7 +12,6 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -22,6 +22,9 @@ public class LoanService {
 
     @Autowired
     private LoanRepository loanRepository;
+
+    @Autowired
+    private ToolRepository toolRepository;
 
     @Autowired
     private ToolService toolService;
@@ -161,6 +164,15 @@ public class LoanService {
                 return availability;
             }
 
+            // Validar que solo se permite cantidad = 1
+            if (quantity != 1) {
+                availability.put("available", false);
+                availability.put("issue", "Solo se permite prestar 1 unidad por préstamo");
+                availability.put("toolStatus", tool.getStatus().toString());
+                availability.put("currentStock", tool.getCurrentStock());
+                return availability;
+            }
+
             // Verificar estado de la herramienta
             boolean toolAvailable = tool.getStatus() == ToolEntity.ToolStatus.AVAILABLE;
 
@@ -245,7 +257,7 @@ public class LoanService {
                 List<LoanEntity> activeLoans = getActiveLoans();
                 LocalDate today = LocalDate.now();
                 return activeLoans.stream()
-                        .filter(loan -> loan.getAgreedReturnDate().isBefore(today))
+                        .filter(loan -> !loan.getAgreedReturnDate().isAfter(today))
                         .collect(Collectors.toList());
             } catch (Exception fallbackError) {
                 System.err.println("Fallback for overdue loans failed: " + fallbackError.getMessage());
@@ -417,25 +429,29 @@ public class LoanService {
                 loan.setLoanDate(LocalDate.now());
             }
 
-            // Get current rental rate
-            BigDecimal dailyRate;
-            try {
-                dailyRate = rateService.getCurrentRentalRate();
-            } catch (Exception e) {
-                System.err.println("Error getting rental rate, using default: " + e.getMessage());
-                dailyRate = BigDecimal.valueOf(100.0); // Valor por defecto
+            // Use tool's specific rental rate
+            ToolEntity tool = loan.getTool();
+            BigDecimal dailyRate = tool.getRentalRate();
+
+            if (dailyRate == null || dailyRate.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException("La herramienta debe tener una tarifa de arriendo válida");
             }
 
             loan.setDailyRate(dailyRate);
             loan.setStatus(LoanEntity.LoanStatus.ACTIVE);
 
+            // 🔧 CORRECCIÓN: Guardar stock ANTES del movimiento para Kardex
+            int stockBeforeMovement = tool.getCurrentStock();
+
             // Update tool stock AND status
-            ToolEntity tool = loan.getTool();
             int newStock = tool.getCurrentStock() - loan.getQuantity();
             tool.setCurrentStock(newStock);
 
             // 🔧 CORRECCIÓN: Actualizar estado de la herramienta según el stock
-            if (newStock <= 0) {
+            // La herramienta solo cambia a LOANED cuando el stock llega a 0 (después del préstamo)
+            if (newStock < 0) {
+                throw new RuntimeException("Error: Stock negativo detectado");
+            } else if (newStock == 0) {
                 tool.setStatus(ToolEntity.ToolStatus.LOANED); // Completamente prestada
                 System.out.println("Tool " + tool.getName() + " status changed to LOANED (stock: " + newStock + ")");
             } else {
@@ -444,39 +460,28 @@ public class LoanService {
                 System.out.println("Tool " + tool.getName() + " remains AVAILABLE (stock: " + newStock + "/" + tool.getInitialStock() + ")");
             }
 
-            // 🔧 NUEVO: Actualizar instancias individuales de herramientas
-            if (toolInstanceService != null) {
-                try {
-                    System.out.println("Reserving " + loan.getQuantity() + " instances for loan...");
-                    List<ToolInstanceEntity> reservedInstances = toolInstanceService.reserveInstancesForLoan(
-                            tool.getId(), loan.getQuantity());
-                    System.out.println("Successfully reserved " + reservedInstances.size() + " instances:");
-                    for (ToolInstanceEntity instance : reservedInstances) {
-                        System.out.println("  - Instance ID: " + instance.getId() + " - Status: " + instance.getStatus());
-                    }
-                } catch (Exception e) {
-                    System.err.println("Error reserving tool instances: " + e.getMessage());
-                    // No fallar el préstamo, pero registrar el error
-                    System.err.println("WARNING: Tool instances were not updated. Stock update only applied to main tool entity.");
-                }
-            } else {
-                System.out.println("ToolInstanceService not available - skipping individual instance updates");
-            }
+            // 🔧 NUEVO: Actualizar instancias individuales de herramientas (opcional)
+            // Las instancias son opcionales - si no existen, el préstamo se crea igual usando solo el stock
+            ToolInstanceEntity reservedInstance = tryReserveToolInstancesAndGetFirst(tool.getId(), loan.getQuantity());
 
-            toolService.updateTool(tool.getId(), tool);
+            // 🔧 CORRECCIÓN: Guardar directamente con el repositorio para evitar validaciones innecesarias
+            // updateTool() valida todos los campos, pero aquí solo estamos actualizando stock y estado
+            toolRepository.save(tool);
             System.out.println("Tool stock updated: " + tool.getName() + " - New stock: " + newStock);
 
             LoanEntity savedLoan = loanRepository.save(loan);
 
-            // Create Kardex movement (opcional)
+            // Create Kardex movement (opcional) - 🔧 CORRECCIÓN: Pasar stock ANTES del movimiento e instancia reservada
             if (kardexMovementService != null) {
                 try {
                     kardexMovementService.createMovement(
                             loan.getTool(),
+                            reservedInstance,  // 🔧 NUEVO: Pasar la instancia específica reservada
                             KardexMovementEntity.MovementType.LOAN,
                             loan.getQuantity(),
                             "Loan #" + savedLoan.getId() + " - Client: " + loan.getClient().getName(),
-                            savedLoan
+                            savedLoan,
+                            stockBeforeMovement  // 🔧 NUEVO: Pasar stock antes del movimiento
                     );
                 } catch (Exception e) {
                     System.err.println("Error creating kardex movement: " + e.getMessage());
@@ -504,6 +509,10 @@ public class LoanService {
         }
         if (loan.getQuantity() == null || loan.getQuantity() <= 0) {
             throw new RuntimeException("La cantidad debe ser mayor a 0");
+        }
+        // NUEVA VALIDACIÓN: Solo se permite cantidad = 1
+        if (loan.getQuantity() != 1) {
+            throw new RuntimeException("Solo se permite prestar 1 unidad por préstamo. Un cliente no puede tener múltiples unidades de la misma herramienta simultáneamente.");
         }
         if (loan.getAgreedReturnDate() == null) {
             throw new RuntimeException("Fecha acordada de devolución es requerida");
@@ -632,9 +641,9 @@ public class LoanService {
         }
     }
 
-    // Return tool - VERSIÓN CORREGIDA CON ESTADOS CORRECTOS E INSTANCIAS
+    // Return tool - VERSIÓN CORREGIDA CON ESTADOS CORRECTOS E INSTANCIAS Y TIPOS DE DAÑO
     @Transactional
-    public LoanEntity returnTool(Long loanId, Boolean damaged, String notes) {
+    public LoanEntity returnTool(Long loanId, Boolean damaged, String damageType, String notes) {
         try {
             LoanEntity loan = loanRepository.findById(loanId)
                     .orElseThrow(() -> new RuntimeException("Loan not found with ID: " + loanId));
@@ -653,42 +662,83 @@ public class LoanService {
 
             // 🔧 CORRECCIÓN: Actualizar stock Y estado de herramienta según el caso
             ToolEntity tool = loan.getTool();
-            if (damaged != null && damaged) {
-                // Herramienta dañada - cambiar estado a reparación
-                tool.setStatus(ToolEntity.ToolStatus.UNDER_REPAIR);
-                System.out.println("Tool " + tool.getName() + " status changed to UNDER_REPAIR (damaged return)");
-                // No devolver stock aún, se devolverá cuando termine la reparación
 
-                // 🔧 NUEVO: Actualizar instancias individuales a UNDER_REPAIR
-                if (toolInstanceService != null) {
-                    try {
-                        System.out.println("Returning " + loan.getQuantity() + " damaged instances...");
-                        List<ToolInstanceEntity> returnedInstances = toolInstanceService.returnInstancesFromLoan(
-                                tool.getId(), loan.getQuantity(), true); // true = damaged
-                        System.out.println("Successfully set " + returnedInstances.size() + " instances to UNDER_REPAIR");
-                    } catch (Exception e) {
-                        System.err.println("Error updating tool instances to UNDER_REPAIR: " + e.getMessage());
+            // 🔧 Guardar stock ANTES de cualquier modificación (para el Kardex)
+            int stockBeforeReturn = tool.getCurrentStock();
+
+            if (damaged != null && damaged) {
+                // Herramienta dañada - verificar tipo de daño
+                System.out.println("Tool " + tool.getName() + " - processing damaged return. Type: " + damageType);
+
+                // Verificar si es daño irreparable
+                boolean isIrreparable = damageType != null && damageType.equals("IRREPARABLE");
+
+                if (isIrreparable) {
+                    // 🔴 DAÑO IRREPARABLE: Dar de baja inmediatamente
+                    System.out.println("IRREPARABLE DAMAGE - Decommissioning instances immediately");
+
+                    if (toolInstanceService != null) {
+                        try {
+                            // Cambiar instancias directamente a DECOMMISSIONED
+                            List<ToolInstanceEntity> decommissionedInstances =
+                                toolInstanceService.decommissionInstances(tool.getId(), loan.getQuantity());
+                            System.out.println("Successfully decommissioned " + decommissionedInstances.size() + " instances");
+
+                            // 🆕 REGISTRAR MOVIMIENTO DE BAJA (DECOMMISSION) EN EL KARDEX
+                            if (kardexMovementService != null && !decommissionedInstances.isEmpty()) {
+                                List<Long> instanceIds = decommissionedInstances.stream()
+                                    .map(ToolInstanceEntity::getId)
+                                    .collect(java.util.stream.Collectors.toList());
+
+                                String decommissionDescription = "Baja por daño irreparable en devolución - Préstamo #" +
+                                    loan.getId() + " - Cliente: " + loan.getClient().getName();
+
+                                kardexMovementService.createDecommissionMovement(
+                                    tool,
+                                    loan.getQuantity(),
+                                    decommissionDescription,
+                                    instanceIds
+                                );
+                                System.out.println("Registered DECOMMISSION movement in kardex for tool " + tool.getName());
+                            }
+                        } catch (Exception e) {
+                            System.err.println("Error decommissioning tool instances: " + e.getMessage());
+                        }
                     }
+
+                    // NO restaurar stock (herramienta perdida)
+                    // El stock permanece reducido ya que la herramienta está dada de baja
+
                 } else {
-                    System.out.println("ToolInstanceService not available - skipping individual instance updates");
+                    // 🟡 DAÑO LEVE: Marcar en reparación (se restaurará al pagar multa)
+                    System.out.println("MINOR DAMAGE - Marking instances as under repair");
+
+                    if (toolInstanceService != null) {
+                        try {
+                            List<ToolInstanceEntity> returnedInstances = toolInstanceService.returnInstancesFromLoan(
+                                    tool.getId(), loan.getQuantity(), true); // true = damaged
+                            System.out.println("Successfully set " + returnedInstances.size() + " instances to UNDER_REPAIR");
+
+                            // 🆕 REGISTRAR MOVIMIENTO DE REPARACIÓN EN EL KARDEX
+                            if (kardexMovementService != null && !returnedInstances.isEmpty()) {
+                                String repairDescription = "Daño leve detectado en devolución - Préstamo #" + loan.getId() +
+                                    " - Cliente: " + loan.getClient().getName();
+                                kardexMovementService.createRepairMovement(tool, repairDescription,
+                                    returnedInstances.get(0).getId());
+                                System.out.println("Registered REPAIR movement in kardex for tool " + tool.getName());
+                            }
+                        } catch (Exception e) {
+                            System.err.println("Error updating tool instances to UNDER_REPAIR: " + e.getMessage());
+                        }
+                    }
+
+                    // NO devolver stock aún, se devolverá cuando se pague la multa
                 }
             } else {
                 // Devolución normal - restaurar stock
                 int newStock = tool.getCurrentStock() + loan.getQuantity();
                 tool.setCurrentStock(newStock);
-
-                // 🔧 CORRECCIÓN: Actualizar estado basado en el nuevo stock
-                if (newStock >= tool.getInitialStock()) {
-                    tool.setStatus(ToolEntity.ToolStatus.AVAILABLE); // Completamente disponible
-                    System.out.println("Tool " + tool.getName() + " status changed to AVAILABLE (stock restored: " + newStock + "/" + tool.getInitialStock() + ")");
-                } else if (newStock > 0) {
-                    tool.setStatus(ToolEntity.ToolStatus.AVAILABLE); // Parcialmente disponible pero aún se considera disponible
-                    System.out.println("Tool " + tool.getName() + " status remains AVAILABLE (partial stock: " + newStock + "/" + tool.getInitialStock() + ")");
-                } else {
-                    // Este caso no debería ocurrir en devoluciones normales, pero por seguridad
-                    tool.setStatus(ToolEntity.ToolStatus.LOANED);
-                    System.out.println("Tool " + tool.getName() + " status remains LOANED (no stock available: " + newStock + ")");
-                }
+                System.out.println("Tool " + tool.getName() + " stock restored: " + newStock + "/" + tool.getInitialStock());
 
                 // 🔧 NUEVO: Actualizar instancias individuales a AVAILABLE
                 if (toolInstanceService != null) {
@@ -705,6 +755,73 @@ public class LoanService {
                 }
             }
 
+            // 🔧 CORRECCIÓN CRÍTICA: Actualizar estado basado en stock DISPONIBLE
+            // Usar el servicio de instancias para determinar el estado correcto
+            if (toolInstanceService != null) {
+                try {
+                    Long availableCount = toolInstanceService.getAvailableCount(tool.getId());
+                    Long loanedCount = toolInstanceService.getInstancesByStatus(
+                        ToolInstanceEntity.ToolInstanceStatus.LOANED).stream()
+                        .filter(i -> i.getTool().getId().equals(tool.getId()))
+                        .count();
+                    Long decommissionedCount = toolInstanceService.getInstancesByStatus(
+                        ToolInstanceEntity.ToolInstanceStatus.DECOMMISSIONED).stream()
+                        .filter(i -> i.getTool().getId().equals(tool.getId()))
+                        .count();
+                    Long underRepairCount = toolInstanceService.getInstancesByStatus(
+                        ToolInstanceEntity.ToolInstanceStatus.UNDER_REPAIR).stream()
+                        .filter(i -> i.getTool().getId().equals(tool.getId()))
+                        .count();
+
+                    if (availableCount > 0) {
+                        tool.setStatus(ToolEntity.ToolStatus.AVAILABLE);
+                        System.out.println("Tool " + tool.getName() + " status: AVAILABLE (available: " + availableCount + ")");
+                    } else if (loanedCount > 0) {
+                        tool.setStatus(ToolEntity.ToolStatus.LOANED);
+                        System.out.println("Tool " + tool.getName() + " status: LOANED (loaned: " + loanedCount + ")");
+                    } else if (underRepairCount > 0 && decommissionedCount == 0) {
+                        // Solo en reparación, sin bajas
+                        tool.setStatus(ToolEntity.ToolStatus.UNDER_REPAIR);
+                        System.out.println("Tool " + tool.getName() + " status: UNDER_REPAIR (under repair: " + underRepairCount + ")");
+                    } else if (decommissionedCount > 0) {
+                        // Hay instancias dadas de baja - marcar como DECOMMISSIONED
+                        // Esto sucede si TODAS están dadas de baja o si la mayoría lo están
+                        long totalInstances = availableCount + loanedCount + decommissionedCount + underRepairCount;
+                        if (decommissionedCount >= totalInstances ||
+                            (availableCount == 0 && loanedCount == 0 && underRepairCount == 0)) {
+                            tool.setStatus(ToolEntity.ToolStatus.DECOMMISSIONED);
+                            System.out.println("Tool " + tool.getName() + " status: DECOMMISSIONED (all instances decommissioned)");
+                        } else {
+                            // Algunas dadas de baja pero otras aún operativas
+                            tool.setStatus(ToolEntity.ToolStatus.UNDER_REPAIR);
+                            System.out.println("Tool " + tool.getName() + " status: UNDER_REPAIR (mixed: " +
+                                decommissionedCount + " decommissioned, " + underRepairCount + " under repair)");
+                        }
+                    } else {
+                        // Sin instancias en ningún estado (no debería pasar)
+                        tool.setStatus(ToolEntity.ToolStatus.DECOMMISSIONED);
+                        System.out.println("Tool " + tool.getName() + " status: DECOMMISSIONED (no instances found)");
+                    }
+                } catch (Exception e) {
+                    System.err.println("Error determining tool status from instances: " + e.getMessage());
+                    // Fallback: usar lógica basada en stock
+                    if (tool.getCurrentStock() > 0) {
+                        tool.setStatus(ToolEntity.ToolStatus.AVAILABLE);
+                    } else {
+                        tool.setStatus(ToolEntity.ToolStatus.LOANED);
+                    }
+                }
+            } else {
+                // Fallback si no hay servicio de instancias
+                if (tool.getCurrentStock() > 0) {
+                    tool.setStatus(ToolEntity.ToolStatus.AVAILABLE);
+                    System.out.println("Tool " + tool.getName() + " status: AVAILABLE (stock: " + tool.getCurrentStock() + ")");
+                } else {
+                    tool.setStatus(ToolEntity.ToolStatus.LOANED);
+                    System.out.println("Tool " + tool.getName() + " status: LOANED (no stock)");
+                }
+            }
+
             try {
                 toolService.updateTool(tool.getId(), tool);
                 System.out.println("Tool updated successfully: " + tool.getName() + " - Status: " + tool.getStatus());
@@ -715,7 +832,7 @@ public class LoanService {
 
             // Calcular y crear multas automáticamente si es necesario
             try {
-                calculateAndCreateFinesAutomatically(loan, damaged != null && damaged);
+                calculateAndCreateFinesAutomatically(loan, damaged != null && damaged, damageType);
             } catch (Exception e) {
                 System.err.println("Error calculating fines: " + e.getMessage());
                 // No fallar la devolución por esto
@@ -738,7 +855,8 @@ public class LoanService {
                             KardexMovementEntity.MovementType.RETURN,
                             loan.getQuantity(),
                             "Return loan #" + loan.getId() + " - " + ((damaged != null && damaged) ? "With damage" : "Good condition"),
-                            loan
+                            loan,
+                            stockBeforeReturn  // 🔧 Pasar el stock ANTES de la devolución
                     );
                 } catch (Exception e) {
                     System.err.println("Error creating kardex movement: " + e.getMessage());
@@ -866,7 +984,9 @@ public class LoanService {
         }
     }
 
-    // MÉTODOS AUXILIARES PRIVADOS:
+    // ============================================================================
+    // MÉTODOS AUXILIARES PRIVADOS
+    // ============================================================================
 
     private void validateClientEligibility(ClientEntity client) {
         if (client == null) {
@@ -883,32 +1003,30 @@ public class LoanService {
 
         try {
             if (fineService.clientHasUnpaidFines(client)) {
-                BigDecimal totalUnpaid = fineService.getTotalUnpaidAmount(client);
-                throw new RuntimeException("Cliente tiene multas impagas por: $" + totalUnpaid);
+                throw new RuntimeException("Cliente tiene multas impagas");
             }
         } catch (Exception e) {
-            System.err.println("Error checking fines, allowing loan: " + e.getMessage());
+            System.err.println("Error checking unpaid fines: " + e.getMessage());
         }
 
         long activeLoanCount = loanRepository.countActiveLoansByClient(client);
         if (activeLoanCount >= 5) {
-            throw new RuntimeException("Cliente ha alcanzado el máximo de 5 préstamos activos");
+            throw new RuntimeException("Cliente ha alcanzado el límite de 5 préstamos activos");
         }
     }
 
     private void validateToolAvailability(ToolEntity tool, Integer quantity) {
         if (tool == null) {
-            throw new RuntimeException("Herramienta es requerida");
+            throw new RuntimeException("Herramienta no encontrada");
         }
         if (tool.getStatus() != ToolEntity.ToolStatus.AVAILABLE) {
-            throw new RuntimeException("Herramienta no está disponible para préstamo. Estado actual: " + tool.getStatus());
+            throw new RuntimeException("Herramienta no está disponible para préstamo");
         }
         if (quantity == null || quantity <= 0) {
             throw new RuntimeException("Cantidad debe ser mayor a 0");
         }
         if (quantity > tool.getCurrentStock()) {
-            throw new RuntimeException("Stock insuficiente. Solicitado: " + quantity +
-                    ", Disponible: " + tool.getCurrentStock());
+            throw new RuntimeException("Stock insuficiente");
         }
     }
 
@@ -916,12 +1034,7 @@ public class LoanService {
         if (client == null || tool == null) {
             return false;
         }
-        try {
-            return loanRepository.existsActiveLoanByClientAndTool(client, tool);
-        } catch (Exception e) {
-            System.err.println("Error checking active loan for tool: " + e.getMessage());
-            return false;
-        }
+        return loanRepository.existsActiveLoanByClientAndTool(client, tool);
     }
 
     private boolean isOverdue(LoanEntity loan) {
@@ -929,7 +1042,7 @@ public class LoanService {
                 loan.getActualReturnDate().isAfter(loan.getAgreedReturnDate());
     }
 
-    private void calculateAndCreateFinesAutomatically(LoanEntity loan, boolean damaged) {
+    private void calculateAndCreateFinesAutomatically(LoanEntity loan, boolean damaged, String damageTypeStr) {
         try {
             LocalDate returnDate = loan.getActualReturnDate();
             if (returnDate == null) return;
@@ -941,14 +1054,312 @@ public class LoanService {
                 fineService.createLateFine(loan, daysLate, lateFeeRate);
             }
 
-            // Multa por daño
+            // Multa por daño - NUEVO: usar damageType
             if (damaged && loan.getTool().getReplacementValue() != null) {
-                BigDecimal repairCost = loan.getTool().getReplacementValue().multiply(BigDecimal.valueOf(0.2)); // 20% del valor
-                fineService.createDamageFine(loan, repairCost, "Tool returned with damage - repair cost calculated");
+                // Convertir string a enum
+                FineEntity.DamageType damageType;
+                try {
+                    damageType = FineEntity.DamageType.valueOf(damageTypeStr);
+                } catch (Exception e) {
+                    System.err.println("Invalid damage type: " + damageTypeStr + ", defaulting to MINOR");
+                    damageType = FineEntity.DamageType.MINOR;
+                }
+
+                String description = "Herramienta devuelta con daño " +
+                    (damageType == FineEntity.DamageType.MINOR ? "leve (reparable)" : "irreparable");
+
+                fineService.createDamageFineWithType(loan, damageType, description);
+                System.out.println("Created " + damageType + " damage fine for loan #" + loan.getId());
             }
         } catch (Exception e) {
             System.err.println("Error creating automatic fines: " + e.getMessage());
         }
+    }
+
+    // Helper method to try reserving tool instances without failing the main transaction
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    protected void tryReserveToolInstances(Long toolId, Integer quantity) {
+        tryReserveToolInstancesAndGetFirst(toolId, quantity);
+    }
+
+    // Helper method to try reserving tool instances and return the first one
+    @Transactional(propagation = org.springframework.transaction.annotation.Propagation.REQUIRES_NEW)
+    protected ToolInstanceEntity tryReserveToolInstancesAndGetFirst(Long toolId, Integer quantity) {
+        if (toolInstanceService == null) {
+            System.out.println("ℹ️ ToolInstanceService not available - using only main tool stock counter");
+            return null;
+        }
+
+        try {
+            System.out.println("Attempting to reserve " + quantity + " instances for loan...");
+            List<ToolInstanceEntity> reservedInstances = toolInstanceService.reserveInstancesForLoan(
+                    toolId, quantity);
+            System.out.println("✅ Successfully reserved " + reservedInstances.size() + " instances:");
+            for (ToolInstanceEntity instance : reservedInstances) {
+                System.out.println("  - Instance ID: " + instance.getId() + " - Status: " + instance.getStatus());
+            }
+            // Return the first reserved instance for kardex tracking
+            return !reservedInstances.isEmpty() ? reservedInstances.get(0) : null;
+        } catch (RuntimeException e) {
+            // This is expected and normal if tool instances are not configured
+            System.err.println("⚠️ Could not reserve tool instances: " + e.getMessage());
+            System.err.println("⚠️ This is normal if tool instances are not configured for this tool.");
+            System.err.println("✅ Loan will proceed using only the main tool stock counter.");
+            // Do NOT rethrow - instances are optional
+            return null;
+        } catch (Exception e) {
+            System.err.println("⚠️ Unexpected error reserving tool instances: " + e.getMessage());
+            System.err.println("✅ Loan will proceed using only the main tool stock counter.");
+            // Do NOT rethrow - instances are optional
+            return null;
+        }
+    }
+
+    // ============================================================================
+    // MÉTODOS PARA MULTAS AUTOMÁTICAS POR PRÉSTAMOS ATRASADOS
+    // ============================================================================
+
+    /**
+     * Genera o actualiza multas automáticamente para todos los préstamos atrasados
+     * Este método debería ser llamado periódicamente (diariamente) o bajo demanda
+     *
+     * @return Resumen de las operaciones realizadas
+     */
+    @Transactional
+    public Map<String, Object> generateOverdueFinesForAllLoans() {
+        Map<String, Object> result = new HashMap<>();
+
+        try {
+            System.out.println("========================================");
+            System.out.println("🔄 GENERANDO MULTAS POR PRÉSTAMOS ATRASADOS");
+            System.out.println("📅 Fecha: " + LocalDate.now());
+            System.out.println("========================================");
+
+            // Obtener tarifa de multa actual
+            BigDecimal lateFeeRate = rateService.getCurrentLateFeeRate();
+            System.out.println("💰 Tarifa de multa diaria: $" + lateFeeRate);
+
+            // Obtener todos los préstamos atrasados
+            LocalDate today = LocalDate.now();
+            List<LoanEntity> overdueLoans = getOverdueLoans();
+
+            System.out.println("📋 Préstamos atrasados encontrados: " + overdueLoans.size());
+
+            if (overdueLoans.isEmpty()) {
+                System.out.println("✅ No hay préstamos atrasados.");
+                result.put("success", true);
+                result.put("message", "No hay préstamos atrasados");
+                result.put("overdueLoans", 0);
+                result.put("finesCreated", 0);
+                result.put("finesUpdated", 0);
+                return result;
+            }
+
+            int finesCreated = 0;
+            int finesUpdated = 0;
+            int errors = 0;
+
+            // Procesar cada préstamo atrasado
+            for (LoanEntity loan : overdueLoans) {
+                try {
+                    boolean wasCreated = generateOrUpdateOverdueFine(loan, lateFeeRate, today);
+                    if (wasCreated) {
+                        finesCreated++;
+                    } else {
+                        finesUpdated++;
+                    }
+                } catch (Exception e) {
+                    System.err.println("❌ Error procesando préstamo #" + loan.getId() + ": " + e.getMessage());
+                    errors++;
+                }
+            }
+
+            System.out.println("\n📊 RESUMEN:");
+            System.out.println("   ✅ Multas creadas: " + finesCreated);
+            System.out.println("   🔄 Multas actualizadas: " + finesUpdated);
+            System.out.println("   ⚠️  Errores: " + errors);
+            System.out.println("========================================\n");
+
+            result.put("success", true);
+            result.put("message", "Multas generadas exitosamente");
+            result.put("overdueLoans", overdueLoans.size());
+            result.put("finesCreated", finesCreated);
+            result.put("finesUpdated", finesUpdated);
+            result.put("errors", errors);
+            result.put("lateFeeRate", lateFeeRate);
+
+        } catch (Exception e) {
+            System.err.println("❌ ERROR en generación de multas: " + e.getMessage());
+            e.printStackTrace();
+            result.put("success", false);
+            result.put("error", e.getMessage());
+        }
+
+        return result;
+    }
+
+    /**
+     * Genera o actualiza una multa por atraso para un préstamo específico
+     *
+     * @param loan Préstamo atrasado
+     * @param lateFeeRate Tarifa de multa diaria
+     * @param currentDate Fecha actual
+     * @return true si se creó una nueva multa, false si se actualizó una existente
+     */
+    @Transactional
+    public boolean generateOrUpdateOverdueFine(LoanEntity loan, BigDecimal lateFeeRate, LocalDate currentDate) {
+        // Calcular días de atraso
+        long daysOverdue = ChronoUnit.DAYS.between(loan.getAgreedReturnDate(), currentDate);
+
+        if (daysOverdue <= 0) {
+            return false; // No está atrasado
+        }
+
+        // Buscar si ya existe una multa de atraso activa para este préstamo
+        List<FineEntity> existingFines = fineService.getFinesByLoan(loan);
+        FineEntity existingLateFine = existingFines.stream()
+                .filter(fine -> fine.getType() == FineEntity.FineType.LATE_RETURN)
+                .filter(fine -> !fine.getPaid())
+                .filter(fine -> fine.getDamageType() == null) // Solo multas por atraso, no por daños
+                .findFirst()
+                .orElse(null);
+
+        if (existingLateFine != null) {
+            // ACTUALIZAR multa existente
+            updateExistingOverdueFine(existingLateFine, daysOverdue, lateFeeRate, loan);
+            return false; // Se actualizó
+        } else {
+            // CREAR nueva multa
+            createNewOverdueFine(loan, daysOverdue, lateFeeRate);
+            return true; // Se creó
+        }
+    }
+
+    /**
+     * Actualiza una multa de atraso existente con los días acumulados
+     */
+    @Transactional
+    protected void updateExistingOverdueFine(FineEntity fine, long daysOverdue, BigDecimal lateFeeRate, LoanEntity loan) {
+        try {
+            // Calcular nuevo monto
+            BigDecimal newAmount = lateFeeRate.multiply(BigDecimal.valueOf(daysOverdue));
+
+            // Solo actualizar si el monto cambió (días aumentaron)
+            if (newAmount.compareTo(fine.getAmount()) > 0) {
+                BigDecimal previousAmount = fine.getAmount();
+                fine.setAmount(newAmount);
+                fine.setDescription(
+                    "Multa por préstamo atrasado - " + daysOverdue + " día(s) de atraso " +
+                    "(Préstamo #" + loan.getId() + " - Cliente: " + loan.getClient().getName() + ")"
+                );
+
+                fineService.updateFine(fine.getId(), fine.getDescription(), fine.getDueDate());
+
+                System.out.println("🔄 Multa #" + fine.getId() + " actualizada:");
+                System.out.println("   Préstamo: #" + loan.getId());
+                System.out.println("   Cliente: " + loan.getClient().getName());
+                System.out.println("   Días atraso: " + daysOverdue);
+                System.out.println("   Monto anterior: $" + previousAmount);
+                System.out.println("   Monto nuevo: $" + newAmount);
+            }
+        } catch (Exception e) {
+            System.err.println("Error actualizando multa #" + fine.getId() + ": " + e.getMessage());
+            throw new RuntimeException("Error actualizando multa: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Crea una nueva multa de atraso para un préstamo
+     */
+    @Transactional
+    protected void createNewOverdueFine(LoanEntity loan, long daysOverdue, BigDecimal lateFeeRate) {
+        try {
+            BigDecimal fineAmount = lateFeeRate.multiply(BigDecimal.valueOf(daysOverdue));
+
+            FineEntity fine = new FineEntity();
+            fine.setClient(loan.getClient());
+            fine.setLoan(loan);
+            fine.setType(FineEntity.FineType.LATE_RETURN);
+            fine.setAmount(fineAmount);
+            fine.setDescription(
+                "Multa por préstamo atrasado - " + daysOverdue + " día(s) de atraso " +
+                "(Préstamo #" + loan.getId() + " - Cliente: " + loan.getClient().getName() + ")"
+            );
+            fine.setDueDate(LocalDate.now().plusDays(30)); // 30 días para pagar
+            fine.setPaid(false);
+
+            FineEntity savedFine = fineService.createFine(fine);
+
+            System.out.println("✅ Nueva multa creada:");
+            System.out.println("   ID: #" + savedFine.getId());
+            System.out.println("   Préstamo: #" + loan.getId());
+            System.out.println("   Cliente: " + loan.getClient().getName());
+            System.out.println("   Días atraso: " + daysOverdue);
+            System.out.println("   Monto: $" + fineAmount);
+
+        } catch (Exception e) {
+            System.err.println("Error creando nueva multa para préstamo #" + loan.getId() + ": " + e.getMessage());
+            throw new RuntimeException("Error creando multa: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Obtiene estadísticas sobre multas automáticas por préstamos atrasados
+     */
+    public Map<String, Object> getOverdueFinesStatistics() {
+        Map<String, Object> stats = new HashMap<>();
+
+        try {
+            List<LoanEntity> overdueLoans = getOverdueLoans();
+
+            int loansWithFines = 0;
+            int loansWithoutFines = 0;
+            BigDecimal totalFineAmount = BigDecimal.ZERO;
+            BigDecimal totalPotentialAmount = BigDecimal.ZERO;
+
+            BigDecimal lateFeeRate = rateService.getCurrentLateFeeRate();
+
+            for (LoanEntity loan : overdueLoans) {
+                long daysOverdue = ChronoUnit.DAYS.between(
+                    loan.getAgreedReturnDate(),
+                    LocalDate.now()
+                );
+
+                BigDecimal potentialAmount = lateFeeRate.multiply(BigDecimal.valueOf(daysOverdue));
+                totalPotentialAmount = totalPotentialAmount.add(potentialAmount);
+
+                // Buscar multa existente
+                List<FineEntity> fines = fineService.getFinesByLoan(loan);
+                FineEntity lateFine = fines.stream()
+                        .filter(fine -> fine.getType() == FineEntity.FineType.LATE_RETURN)
+                        .filter(fine -> !fine.getPaid())
+                        .filter(fine -> fine.getDamageType() == null)
+                        .findFirst()
+                        .orElse(null);
+
+                if (lateFine != null) {
+                    loansWithFines++;
+                    totalFineAmount = totalFineAmount.add(lateFine.getAmount());
+                } else {
+                    loansWithoutFines++;
+                }
+            }
+
+            stats.put("overdueLoans", overdueLoans.size());
+            stats.put("loansWithActiveFine", loansWithFines);
+            stats.put("loansWithoutFine", loansWithoutFines);
+            stats.put("totalActiveFinesAmount", totalFineAmount);
+            stats.put("totalPotentialAmount", totalPotentialAmount);
+            stats.put("lateFeeRate", lateFeeRate);
+            stats.put("needsUpdate", loansWithoutFines > 0 ||
+                    totalFineAmount.compareTo(totalPotentialAmount) < 0);
+
+        } catch (Exception e) {
+            System.err.println("Error obteniendo estadísticas: " + e.getMessage());
+            stats.put("error", e.getMessage());
+        }
+
+        return stats;
     }
 
     // CLASE INTERNA PARA VALIDACIÓN - REQUERIDA POR EL CONTROLADOR
@@ -993,4 +1404,6 @@ public class LoanService {
             return clientEligible && toolAvailable && !hasExistingLoanForTool;
         }
     }
+
+    // ============================================================================
 }

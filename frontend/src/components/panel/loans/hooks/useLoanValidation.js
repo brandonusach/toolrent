@@ -196,10 +196,12 @@ export const useLoanValidation = () => {
         }
 
         const today = new Date();
+        today.setHours(0, 0, 0, 0);
         const returnDateObj = new Date(returnDate);
+        returnDateObj.setHours(0, 0, 0, 0);
 
-        if (returnDateObj <= today) {
-            return { valid: false, issue: 'La fecha de devolución debe ser posterior a hoy' };
+        if (returnDateObj < today) {
+            return { valid: false, issue: 'La fecha de devolución no puede ser anterior a hoy' };
         }
 
         // Verificar que no sea más de 30 días

@@ -53,7 +53,8 @@ export const useClients = () => {
             return updatedClient;
         } catch (err) {
             console.error('Error updating client:', err);
-            throw new Error(err.message || 'Error al actualizar el cliente');
+            // Propagar el error original para que ClientForm pueda acceder a error.response.data
+            throw err;
         }
     }, []);
 

@@ -1,7 +1,7 @@
 // inventory/components/ToolList.jsx - PURE VERSION
 import React from 'react';
 import {
-    Plus, Edit2, Trash2, Eye, Package, AlertTriangle,
+    Plus, Edit2, Eye, Package, AlertTriangle,
     Search, RefreshCw, TrendingUp, TrendingDown
 } from 'lucide-react';
 
@@ -15,7 +15,6 @@ const ToolList = ({
                       setCategoryFilter,
                       onViewInstances,
                       onEditTool,
-                      onDeleteTool,
                       onAddStock,
                       onDecommission,
                       onAddNew,
@@ -30,18 +29,6 @@ const ToolList = ({
             (tool.category && tool.category.id.toString() === categoryFilter);
         return matchesSearch && matchesCategory;
     });
-
-    const handleDeleteTool = async (toolId) => {
-        if (!window.confirm('¿Está seguro de eliminar esta herramienta permanentemente?')) {
-            return;
-        }
-        try {
-            await onDeleteTool(toolId);
-            alert('Herramienta eliminada exitosamente');
-        } catch (error) {
-            alert('Error al eliminar la herramienta');
-        }
-    };
 
     return (
         <div>
@@ -102,6 +89,9 @@ const ToolList = ({
                                 Stock
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
+                                Tarifa/Día
+                            </th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
                                 Valor Reposición
                             </th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-300 uppercase tracking-wider">
@@ -120,7 +110,6 @@ const ToolList = ({
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                     <div className="flex items-center">
-                                        {/* Display stock as provided by backend, with optional styling based on values */}
                                         <span className={`text-sm font-medium ${
                                             tool.currentStock <= 0
                                                 ? 'text-red-400'
@@ -136,6 +125,9 @@ const ToolList = ({
                                     </div>
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-gray-300">
+                                    ${(tool.rentalRate || 0).toLocaleString('es-CL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-gray-300">
                                     ${(tool.replacementValue || 0).toLocaleString('es-CL')}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -143,7 +135,7 @@ const ToolList = ({
                                         <button
                                             onClick={() => onViewInstances(tool)}
                                             className="text-blue-400 hover:text-blue-300 p-1 rounded"
-                                            title="Ver Instancias"
+                                            title="Ver Herramientas"
                                         >
                                             <Eye className="h-4 w-4" />
                                         </button>
@@ -164,16 +156,9 @@ const ToolList = ({
                                         <button
                                             onClick={() => onDecommission(tool)}
                                             className="text-orange-400 hover:text-orange-300 p-1 rounded"
-                                            title="Dar de Baja"
+                                            title="Dar de Baja (Eliminar)"
                                         >
                                             <TrendingDown className="h-4 w-4" />
-                                        </button>
-                                        <button
-                                            onClick={() => handleDeleteTool(tool.id)}
-                                            className="text-red-400 hover:text-red-300 p-1 rounded"
-                                            title="Eliminar"
-                                        >
-                                            <Trash2 className="h-4 w-4" />
                                         </button>
                                     </div>
                                 </td>

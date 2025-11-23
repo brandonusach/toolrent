@@ -4,6 +4,8 @@ import com.toolrent.backend.entities.ToolEntity;
 import com.toolrent.backend.entities.ToolInstanceEntity;
 import com.toolrent.backend.entities.ToolInstanceEntity.ToolInstanceStatus;
 import com.toolrent.backend.repositories.ToolInstanceRepository;
+import com.toolrent.backend.repositories.ToolRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,9 +17,14 @@ import java.util.Optional;
 public class ToolInstanceService {
 
     private final ToolInstanceRepository toolInstanceRepository;
+    private final ToolRepository toolRepository;
 
-    public ToolInstanceService(ToolInstanceRepository toolInstanceRepository) {
+    @Autowired
+    public ToolInstanceService(
+            ToolInstanceRepository toolInstanceRepository,
+            ToolRepository toolRepository) {
         this.toolInstanceRepository = toolInstanceRepository;
+        this.toolRepository = toolRepository;
     }
 
     // Create multiple instances when a tool is created
@@ -166,6 +173,7 @@ public class ToolInstanceService {
     }
 
     // Repair instance (change status from UNDER_REPAIR to AVAILABLE)
+    @Transactional
     public ToolInstanceEntity repairInstance(Long instanceId) {
         ToolInstanceEntity instance = toolInstanceRepository.findById(instanceId)
                 .orElseThrow(() -> new RuntimeException("Tool instance not found with ID: " + instanceId));
@@ -175,7 +183,32 @@ public class ToolInstanceService {
         }
 
         instance.setStatus(ToolInstanceStatus.AVAILABLE);
-        return toolInstanceRepository.save(instance);
+        ToolInstanceEntity repairedInstance = toolInstanceRepository.save(instance);
+
+        // 🔧 NUEVO: Actualizar el stock de la herramienta y su estado
+        try {
+            ToolEntity tool = instance.getTool();
+            if (tool != null) {
+                // Incrementar el stock disponible
+                tool.setCurrentStock(tool.getCurrentStock() + 1);
+
+                // Actualizar el estado de la herramienta basado en instancias disponibles
+                Long availableCount = getAvailableCount(tool.getId());
+                if (availableCount > 0) {
+                    tool.setStatus(ToolEntity.ToolStatus.AVAILABLE);
+                    System.out.println("Tool " + tool.getName() + " status updated to AVAILABLE after repair (available instances: " + availableCount + ")");
+                }
+
+                // Guardar la herramienta actualizada
+                toolRepository.save(tool);
+                System.out.println("Tool " + tool.getName() + " stock updated: " + tool.getCurrentStock());
+            }
+        } catch (Exception e) {
+            System.err.println("Error updating tool status after repair: " + e.getMessage());
+            // No fallar la reparación por esto
+        }
+
+        return repairedInstance;
     }
 
     // Delete all instances of a tool (for cascade deletion)
@@ -265,6 +298,75 @@ public class ToolInstanceService {
         }
 
         return returnedInstances;
+    }
+
+    // NUEVO: Reparar múltiples instancias (UNDER_REPAIR → AVAILABLE) - usado al pagar multa por daño leve
+    @Transactional
+    public List<ToolInstanceEntity> repairInstances(Long toolId, int quantity) {
+        if (quantity <= 0) {
+            throw new RuntimeException("Quantity must be greater than 0");
+        }
+
+        List<ToolInstanceEntity> underRepairInstances = toolInstanceRepository.findByToolIdAndStatus(
+            toolId, ToolInstanceStatus.UNDER_REPAIR);
+
+        if (underRepairInstances.isEmpty()) {
+            System.out.println("No instances under repair for tool ID: " + toolId);
+            return List.of();
+        }
+
+        // Reparar hasta la cantidad especificada o todas las que estén en reparación
+        int toRepair = Math.min(quantity, underRepairInstances.size());
+        List<ToolInstanceEntity> repairedInstances = new java.util.ArrayList<>();
+
+        for (int i = 0; i < toRepair; i++) {
+            ToolInstanceEntity instance = underRepairInstances.get(i);
+            instance.setStatus(ToolInstanceStatus.AVAILABLE);
+            repairedInstances.add(toolInstanceRepository.save(instance));
+            System.out.println("Instance ID " + instance.getId() + " repaired and marked as AVAILABLE");
+        }
+
+        return repairedInstances;
+    }
+
+    // NUEVO: Dar de baja múltiples instancias - usado al devolver con daño irreparable o al pagar multa
+    @Transactional
+    public List<ToolInstanceEntity> decommissionInstances(Long toolId, int quantity) {
+        if (quantity <= 0) {
+            throw new RuntimeException("Quantity must be greater than 0");
+        }
+
+        // Primero buscar instancias prestadas (para devoluciones con daño irreparable)
+        List<ToolInstanceEntity> loanedInstances = toolInstanceRepository.findByToolIdAndStatus(
+            toolId, ToolInstanceStatus.LOANED);
+
+        // Si no hay prestadas, buscar en reparación (para pago de multas)
+        List<ToolInstanceEntity> underRepairInstances = toolInstanceRepository.findByToolIdAndStatus(
+            toolId, ToolInstanceStatus.UNDER_REPAIR);
+
+        // Combinar ambas listas (prioridad a prestadas)
+        List<ToolInstanceEntity> instancesToDecommission = new java.util.ArrayList<>();
+        instancesToDecommission.addAll(loanedInstances);
+        instancesToDecommission.addAll(underRepairInstances);
+
+        if (instancesToDecommission.isEmpty()) {
+            System.out.println("No instances available to decommission for tool ID: " + toolId);
+            return List.of();
+        }
+
+        // Dar de baja hasta la cantidad especificada
+        int toDecommission = Math.min(quantity, instancesToDecommission.size());
+        List<ToolInstanceEntity> decommissionedInstances = new java.util.ArrayList<>();
+
+        for (int i = 0; i < toDecommission; i++) {
+            ToolInstanceEntity instance = instancesToDecommission.get(i);
+            ToolInstanceStatus previousStatus = instance.getStatus();
+            instance.setStatus(ToolInstanceStatus.DECOMMISSIONED);
+            decommissionedInstances.add(toolInstanceRepository.save(instance));
+            System.out.println("Instance ID " + instance.getId() + " decommissioned (irreparable damage) - previous status: " + previousStatus);
+        }
+
+        return decommissionedInstances;
     }
 
     // Inner class for statistics

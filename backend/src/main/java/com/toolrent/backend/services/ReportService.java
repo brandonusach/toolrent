@@ -18,8 +18,8 @@ public class ReportService {
     @Autowired
     private LoanRepository loanRepository;
 
-    // Constante para cálculo de multas (5 pesos por día de atraso)
-    private static final double FINE_PER_DAY = 5.0;
+    @Autowired
+    private RateService rateService;
 
     /**
      * RF6.1: Generar reporte de préstamos activos
@@ -249,10 +249,13 @@ public class ReportService {
     private OverdueClientsReportDTO.OverdueClientDTO mapToOverdueClientDTO(ClientEntity client, List<LoanEntity> overdueLoans) {
         String clientName = client.getName();
 
+        // Obtener tarifa actual de multas del sistema
+        double lateFeeRate = rateService.getCurrentLateFeeRate().doubleValue();
+
         List<OverdueClientsReportDTO.OverdueLoanDTO> overdueLoanDTOs = overdueLoans.stream()
                 .map(loan -> {
                     int daysOverdue = calculateDaysOverdue(loan);
-                    double fineAmount = daysOverdue * FINE_PER_DAY;
+                    double fineAmount = daysOverdue * lateFeeRate;
                     String toolName = loan.getTool() != null ? loan.getTool().getName() : "Herramienta desconocida";
                     return new OverdueClientsReportDTO.OverdueLoanDTO(loan.getId(), toolName, daysOverdue, fineAmount);
                 })

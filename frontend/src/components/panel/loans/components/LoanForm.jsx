@@ -9,7 +9,6 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
     const [formData, setFormData] = useState({
         clientId: '',
         toolId: '',
-        quantity: 1,
         agreedReturnDate: '',
         notes: ''
     });
@@ -30,15 +29,17 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
 
     // Validar cuando cambien los parámetros principales
     useEffect(() => {
-        if (formData.clientId && formData.toolId && formData.quantity) {
+        if (formData.clientId && formData.toolId) {
             validateComprehensive();
         }
-    }, [formData.clientId, formData.toolId, formData.quantity]);
+    }, [formData.clientId, formData.toolId]);
 
     const loadClients = async () => {
         try {
             const response = await httpClient.get('/api/v1/clients/');
             console.log('Clients loaded:', response.data); // Debug
+            // Mostrar TODOS los clientes activos, incluso los que tienen multas
+            // La restricción se mostrará en el componente ClientValidation
             const activeClients = response.data.filter(client => client.status === 'ACTIVE');
             setClients(activeClients);
         } catch (err) {
@@ -68,7 +69,7 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
             const response = await httpClient.post('/api/v1/loans/validate-comprehensive', {
                 clientId: parseInt(formData.clientId),
                 toolId: parseInt(formData.toolId),
-                quantity: parseInt(formData.quantity)
+                quantity: 1  // Cantidad siempre fija en 1
             }).catch(() => {
                 // Si falla, usar validación basada en los componentes individuales
                 return {
@@ -130,10 +131,6 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
             return;
         }
 
-        if (!formData.quantity || formData.quantity < 1) {
-            setError('La cantidad debe ser mayor a 0');
-            return;
-        }
 
         // Validar usando los datos disponibles
         const clientEligible = clientValidation?.eligible !== false;
@@ -164,8 +161,8 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
             const loanData = {
                 clientId: Number(formData.clientId),
                 toolId: Number(formData.toolId),
-                quantity: Number(formData.quantity),
-                agreedReturnDate: formData.agreedReturnDate,
+                quantity: 1,  // Cantidad siempre fija en 1
+                agreedReturnDate: formData.agreedReturnDate,  // Enviar formato YYYY-MM-DD simple
                 notes: (formData.notes || '').trim()
             };
 
@@ -176,15 +173,13 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
             if (isNaN(loanData.toolId) || loanData.toolId <= 0) {
                 throw new Error('ID de herramienta inválido');
             }
-            if (isNaN(loanData.quantity) || loanData.quantity <= 0) {
-                throw new Error('Cantidad inválida');
-            }
 
             // Validar fecha
             const today = new Date();
-            const returnDate = new Date(loanData.agreedReturnDate);
-            if (returnDate <= today) {
-                throw new Error('La fecha de devolución debe ser posterior a hoy');
+            today.setHours(0, 0, 0, 0);
+            const returnDate = new Date(formData.agreedReturnDate + 'T00:00:00');
+            if (returnDate < today) {
+                throw new Error('La fecha de devolución no puede ser anterior a hoy');
             }
 
             console.log('Sending loan data:', loanData); // Debug
@@ -233,10 +228,11 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-            <div className="bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 overflow-y-auto">
+            <div className="bg-gray-800 rounded-lg shadow-xl max-w-4xl w-full my-8 max-h-[calc(100vh-4rem)]">
+                <div className="max-h-[calc(100vh-4rem)] overflow-y-auto">
                 {/* Header */}
-                <div className="flex items-center justify-between p-6 border-b border-gray-700">
+                <div className="flex items-center justify-between p-6 border-b border-gray-700 sticky top-0 bg-gray-800 z-10">
                     <h2 className="text-xl font-bold text-white">Crear Nuevo Préstamo</h2>
                     <button
                         onClick={onClose}
@@ -293,38 +289,17 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
                                     <option value="">Seleccionar herramienta...</option>
                                     {tools.map(tool => (
                                         <option key={tool.id} value={tool.id}>
-                                            {safeRender(tool.name)} - Stock: {safeRender(tool.currentStock)} - ${safeRender(tool.replacementValue)}
+                                            {safeRender(tool.name)} - Stock: {safeRender(tool.currentStock)} - ${safeRender(tool.rentalRate)}/día
                                         </option>
                                     ))}
                                 </select>
                                 {selectedTool && (
                                     <p className="text-sm text-gray-400 mt-1">
-                                        Categoría: {safeRender(selectedTool.category?.name)} | Estado: {safeRender(selectedTool.status)}
+                                        Categoría: {safeRender(selectedTool.category?.name)} | Tarifa: ${safeRender(selectedTool.rentalRate)}/día | Estado: {safeRender(selectedTool.status)}
                                     </p>
                                 )}
                             </div>
 
-                            {/* Cantidad */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-300 mb-2">
-                                    Cantidad
-                                </label>
-                                <input
-                                    type="number"
-                                    name="quantity"
-                                    value={formData.quantity}
-                                    onChange={handleInputChange}
-                                    min="1"
-                                    max={selectedTool?.currentStock || 1}
-                                    required
-                                    className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                                />
-                                {selectedTool && (
-                                    <p className="text-sm text-gray-400 mt-1">
-                                        Máximo disponible: {safeRender(selectedTool.currentStock)}
-                                    </p>
-                                )}
-                            </div>
 
                             {/* Fecha de devolución acordada */}
                             <div>
@@ -378,7 +353,7 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
                             {formData.toolId && (
                                 <ToolAvailability
                                     toolId={parseInt(formData.toolId)}
-                                    quantity={parseInt(formData.quantity)}
+                                    quantity={1}
                                     clientId={formData.clientId ? parseInt(formData.clientId) : null}
                                     onAvailabilityChange={handleToolAvailabilityChange}
                                 />
@@ -464,16 +439,6 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
                         </div>
                     )}
 
-                    {/* Debug info */}
-                    {process.env.NODE_ENV === 'development' && (
-                        <div className="bg-blue-900 border border-blue-700 rounded-md p-3 text-xs">
-                            <p className="text-blue-200">Debug Info:</p>
-                            <p className="text-blue-300">Clients: {clients.length}</p>
-                            <p className="text-blue-300">Tools: {tools.length}</p>
-                            <p className="text-blue-300">Selected Client: {formData.clientId}</p>
-                            <p className="text-blue-300">Selected Tool: {formData.toolId}</p>
-                        </div>
-                    )}
 
                     {/* Buttons */}
                     <div className="flex justify-end space-x-3 pt-4 border-t border-gray-700">
@@ -494,6 +459,7 @@ const LoanForm = ({ onSubmit, onClose, onSuccess }) => {
                         </button>
                     </div>
                 </form>
+                </div>
             </div>
         </div>
     );

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Calendar, Download, BarChart3, TrendingUp, TrendingDown, Package } from 'lucide-react';
 import { useKardex } from '../hooks/useKardex';
+import { formatDateTime } from '../../../../utils/dateUtils';
 
 const DateRangeReport = ({ onViewDetail }) => {
     const [dateRange, setDateRange] = useState({
@@ -101,14 +102,27 @@ const DateRangeReport = ({ onViewDetail }) => {
         return stats;
     };
 
-    const formatDateTime = (dateTime) => {
-        return new Date(dateTime).toLocaleString('es-CL', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+
+    const getToolStatusBadge = (status) => {
+        const badges = {
+            AVAILABLE: 'bg-green-500/10 text-green-400 border-green-500/30',
+            LOANED: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+            IN_REPAIR: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
+            DECOMMISSIONED: 'bg-gray-500/10 text-gray-400 border-gray-500/30',
+            PARTIALLY_AVAILABLE: 'bg-orange-500/10 text-orange-400 border-orange-500/30'
+        };
+        return badges[status] || 'bg-slate-500/10 text-slate-400 border-slate-500/30';
+    };
+
+    const getToolStatusLabel = (status) => {
+        const labels = {
+            AVAILABLE: 'Disponible',
+            LOANED: 'Prestada',
+            IN_REPAIR: 'En Reparación',
+            DECOMMISSIONED: 'Dada de Baja',
+            PARTIALLY_AVAILABLE: 'Parcial'
+        };
+        return labels[status] || status;
     };
 
     const getMovementColor = (type) => {
@@ -351,6 +365,11 @@ const DateRangeReport = ({ onViewDetail }) => {
                                             </span>
                                             <div>
                                                 <h4 className="font-medium text-slate-100">{movement.tool.name}</h4>
+                                                {movement.type === 'DECOMMISSION' && movement.description && (
+                                                    <p className="text-xs text-red-400 font-medium mt-1">
+                                                        ⚠️ {movement.description}
+                                                    </p>
+                                                )}
                                                 <p className="text-sm text-slate-400">{formatDateTime(movement.createdAt)}</p>
                                             </div>
                                         </div>

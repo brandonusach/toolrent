@@ -3,6 +3,7 @@ package com.toolrent.backend.services;
 import com.toolrent.backend.entities.*;
 import com.toolrent.backend.repositories.KardexMovementRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -19,7 +20,8 @@ public class KardexMovementService {
     private final ToolInstanceService toolInstanceService;
 
     @Autowired
-    private ToolService toolService; // Inyección de ToolService
+    @Lazy
+    private ToolService toolService; // Inyección de ToolService con @Lazy para romper ciclo
 
     public KardexMovementService(KardexMovementRepository kardexMovementRepository,
                                  ToolInstanceService toolInstanceService) {
@@ -29,29 +31,27 @@ public class KardexMovementService {
 
     // ========== MÉTODOS PRINCIPALES PARA REGISTRO DE MOVIMIENTOS ==========
 
-    // RF5.1: Create movement with automatic stock tracking and instance management
+    // RF5.1: Create movement with automatic stock tracking, instance management, and specific instance tracking
     @Transactional
-    public KardexMovementEntity createMovement(ToolEntity tool, KardexMovementEntity.MovementType type,
+    public KardexMovementEntity createMovement(ToolEntity tool, ToolInstanceEntity toolInstance,
+                                               KardexMovementEntity.MovementType type,
                                                Integer quantity, String description,
-                                               LoanEntity relatedLoan) {
+                                               LoanEntity relatedLoan, Integer stockBeforeMovement) {
 
         validateMovementCreation(tool, type, quantity);
 
-        // Get current stock before movement
-        Integer stockBefore = tool.getCurrentStock();
+        // Get current stock before movement (use provided value or current stock)
+        Integer stockBefore = (stockBeforeMovement != null) ? stockBeforeMovement : tool.getCurrentStock();
 
         // Calculate stock after movement
         Integer stockAfter = calculateStockAfter(stockBefore, type, quantity);
 
-        // MEJORA: Validar que el stock después del movimiento sea consistente con las instancias
-        if (type == KardexMovementEntity.MovementType.LOAN ||
-                type == KardexMovementEntity.MovementType.DECOMMISSION) {
-            validateInstanceAvailability(tool, quantity);
-        }
+        // NOTA: No validamos instancias aquí porque eso debe hacerse en los servicios específicos
+        // (LoanService, ToolService) ANTES de actualizar el stock y crear el movimiento kardex
 
-        // Create the movement
+        // Create the movement with tool instance
         KardexMovementEntity movement = new KardexMovementEntity(
-                tool, type, quantity, stockBefore, stockAfter, description, relatedLoan
+                tool, toolInstance, type, quantity, stockBefore, stockAfter, description, relatedLoan
         );
 
         // MEJORA: Actualizar instancias automáticamente según el tipo de movimiento
@@ -60,10 +60,25 @@ public class KardexMovementService {
         return kardexMovementRepository.save(movement);
     }
 
+    // RF5.1: Create movement with automatic stock tracking and instance management (without specific instance)
+    @Transactional
+    public KardexMovementEntity createMovement(ToolEntity tool, KardexMovementEntity.MovementType type,
+                                               Integer quantity, String description,
+                                               LoanEntity relatedLoan, Integer stockBeforeMovement) {
+        return createMovement(tool, null, type, quantity, description, relatedLoan, stockBeforeMovement);
+    }
+
     // Overloaded method without loan relation
     public KardexMovementEntity createMovement(ToolEntity tool, KardexMovementEntity.MovementType type,
                                                Integer quantity, String description) {
-        return createMovement(tool, type, quantity, description, null);
+        return createMovement(tool, type, quantity, description, null, null);
+    }
+
+    // Overloaded method with loan but without explicit stockBefore
+    public KardexMovementEntity createMovement(ToolEntity tool, KardexMovementEntity.MovementType type,
+                                               Integer quantity, String description,
+                                               LoanEntity relatedLoan) {
+        return createMovement(tool, type, quantity, description, relatedLoan, null);
     }
 
     // ========== MÉTODOS ESPECÍFICOS POR TIPO DE MOVIMIENTO ==========
@@ -82,29 +97,11 @@ public class KardexMovementService {
                                                    String description,
                                                    LoanEntity loan) {
 
-        // MEJORA: Validar disponibilidad antes del movimiento
-        if (!toolInstanceService.isAvailable(tool.getId(), quantity)) {
-            throw new RuntimeException("No hay suficientes instancias disponibles para el préstamo");
-        }
-
+        // NOTA: No validamos ni reservamos instancias aquí porque eso ya se hace en LoanService
+        // Este método solo registra el movimiento en el kardex
         KardexMovementEntity movement = createMovement(tool, KardexMovementEntity.MovementType.LOAN,
                 quantity, description, loan);
 
-        // MEJORA: Reservar instancias específicas para el préstamo
-        try {
-            List<ToolInstanceEntity> reservedInstances =
-                    toolInstanceService.reserveMultipleInstances(tool.getId(), quantity);
-
-            // Agregar información de las instancias reservadas en la descripción
-            List<Long> instanceIds = reservedInstances.stream()
-                    .map(ToolInstanceEntity::getId)
-                    .collect(java.util.stream.Collectors.toList());
-
-            movement.setDescription(description + " - Instancias reservadas: " + instanceIds);
-
-        } catch (Exception e) {
-            throw new RuntimeException("Error al reservar instancias para el préstamo: " + e.getMessage());
-        }
 
         return kardexMovementRepository.save(movement);
     }
@@ -149,27 +146,17 @@ public class KardexMovementService {
                                                            String description,
                                                            List<Long> instanceIds) {
 
-        KardexMovementEntity movement = createMovement(tool, KardexMovementEntity.MovementType.DECOMMISSION,
-                quantity, description);
+        // IMPORTANTE: No dar de baja las instancias aquí porque ToolService.decommissionTool() ya lo hizo
+        // Solo registrar el movimiento en el kardex
 
-        // MEJORA: Dar de baja instancias específicas
+        // Agregar información de las instancias a la descripción
+        String finalDescription = description;
         if (instanceIds != null && !instanceIds.isEmpty()) {
-            try {
-                for (Long instanceId : instanceIds) {
-                    toolInstanceService.decommissionInstance(instanceId);
-                }
-                movement.setDescription(description + " - Instancias dadas de baja: " + instanceIds);
-            } catch (Exception e) {
-                throw new RuntimeException("Error al dar de baja instancias: " + e.getMessage());
-            }
-        } else {
-            // Si no se especifican instancias, dar de baja automáticamente
-            try {
-                toolInstanceService.decommissionMultipleInstances(tool.getId(), quantity);
-            } catch (Exception e) {
-                throw new RuntimeException("Error al dar de baja instancias automáticamente: " + e.getMessage());
-            }
+            finalDescription = description + " - Instancias dadas de baja: " + instanceIds;
         }
+
+        KardexMovementEntity movement = createMovement(tool, KardexMovementEntity.MovementType.DECOMMISSION,
+                quantity, finalDescription);
 
         return kardexMovementRepository.save(movement);
     }
@@ -270,7 +257,7 @@ public class KardexMovementService {
 
         switch (type) {
             case LOAN:
-                // Las instancias se manejan en createLoanMovement
+                // Las instancias se reservan en LoanService.createLoan(), no aquí
                 break;
             case RETURN:
                 // Las instancias se manejan en createReturnMovement
@@ -369,12 +356,16 @@ public class KardexMovementService {
 
 
         // MEJORA: Validación más estricta para movimientos que afectan stock
+        // Nota: No validamos aquí porque el stock ya fue actualizado antes de crear el movimiento
+        // La validación debe hacerse en el servicio de préstamos antes de actualizar el stock
+        /*
         if (type == KardexMovementEntity.MovementType.LOAN ||
                 type == KardexMovementEntity.MovementType.DECOMMISSION) {
             if (quantity > tool.getCurrentStock()) {
                 throw new RuntimeException("Cannot create movement: insufficient stock");
             }
         }
+        */
     }
 
     private Integer calculateStockAfter(Integer stockBefore, KardexMovementEntity.MovementType type, Integer quantity) {

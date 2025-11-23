@@ -1,5 +1,4 @@
-// loans/components/OverdueLoans.jsx - Préstamos atrasados con alertas y acciones
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
     AlertTriangle,
     Calendar,
@@ -15,24 +14,41 @@ import {
     SortAsc,
     SortDesc
 } from 'lucide-react';
+import { formatDateLocal, daysBetween } from '../../../../utils/dateUtils';
+import { useRates } from '../../rates/hooks/useRates';
 
-const OverdueLoans = ({ loans, loading, onReturnTool, onCalculateFine, onRefresh }) => {
+const OverdueLoans = ({ loans, loading, onReturnTool, onRefresh }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [sortBy, setSortBy] = useState('daysOverdue');
     const [sortOrder, setSortOrder] = useState('desc');
+
+    const {
+        rates,
+        getCurrentRates
+    } = useRates();
+
+    // Cargar tarifas actuales al montar el componente
+    useEffect(() => {
+        getCurrentRates();
+    }, []);
 
     // Calcular días de atraso y procesar préstamos
     const processedLoans = useMemo(() => {
         if (!loans) return [];
 
-        return loans.map(loan => {
-            const today = new Date();
-            const agreedDate = new Date(loan.agreedReturnDate);
-            const daysOverdue = Math.ceil((today - agreedDate) / (1000 * 60 * 60 * 24));
-            const loanDuration = Math.ceil((today - new Date(loan.loanDate)) / (1000 * 60 * 60 * 24));
+        const today = new Date().toISOString().split('T')[0];
 
-            // Estimar multa por atraso (solo estimación para la UI)
-            const estimatedLateFine = daysOverdue * (loan.dailyRate || 0) * 0.1; // Asumiendo 10% de la tarifa diaria
+        // Obtener tarifa real de multas del sistema
+        const lateFeeRate = rates.current?.LATE_FEE_RATE || 2000;
+
+        return loans.map(loan => {
+            const daysOverdue = Math.abs(daysBetween(loan.agreedReturnDate, today));
+            const loanDuration = Math.abs(daysBetween(loan.loanDate, today));
+
+            // 💰 ESTIMACIÓN de multa por atraso usando tarifa real del sistema
+            // La multa REAL se calcula en el backend al procesar la devolución
+            // Fórmula: daysLate * lateFeeRate (configurada en RateService)
+            const estimatedLateFine = daysOverdue * lateFeeRate;
 
             return {
                 ...loan,
@@ -42,7 +58,7 @@ const OverdueLoans = ({ loans, loading, onReturnTool, onCalculateFine, onRefresh
                 urgencyLevel: daysOverdue > 7 ? 'high' : daysOverdue > 3 ? 'medium' : 'low'
             };
         });
-    }, [loans]);
+    }, [loans, rates.current]);
 
     // Filtrar y ordenar
     const filteredLoans = useMemo(() => {
@@ -99,14 +115,6 @@ const OverdueLoans = ({ loans, loading, onReturnTool, onCalculateFine, onRefresh
             default:
                 return 'Medio';
         }
-    };
-
-    const formatDate = (dateString) => {
-        return new Date(dateString).toLocaleDateString('es-ES', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-        });
     };
 
     const handleSort = (field) => {
@@ -298,7 +306,6 @@ const OverdueLoans = ({ loans, loading, onReturnTool, onCalculateFine, onRefresh
                                                 Herramienta:
                                             </span>
                                             <p className="text-white font-medium">{loan.tool?.name}</p>
-                                            <p className="text-gray-400 text-xs">Cantidad: {loan.quantity}</p>
                                             <p className="text-gray-400 text-xs">Valor: ${loan.tool?.replacementValue}</p>
                                         </div>
 
@@ -309,10 +316,10 @@ const OverdueLoans = ({ loans, loading, onReturnTool, onCalculateFine, onRefresh
                                                 Fechas:
                                             </span>
                                             <p className="text-white text-xs">
-                                                Préstamo: {formatDate(loan.loanDate)}
+                                                Préstamo: {formatDateLocal(loan.loanDate)}
                                             </p>
                                             <p className="text-red-400 text-xs font-medium">
-                                                Debía devolver: {formatDate(loan.agreedReturnDate)}
+                                                Debía devolver: {formatDateLocal(loan.agreedReturnDate)}
                                             </p>
                                             <p className="text-gray-400 text-xs">
                                                 <Clock className="h-3 w-3 inline mr-1" />
@@ -360,14 +367,6 @@ const OverdueLoans = ({ loans, loading, onReturnTool, onCalculateFine, onRefresh
                                     >
                                         <Package2 className="h-4 w-4 mr-2" />
                                         Procesar Devolución
-                                    </button>
-
-                                    <button
-                                        onClick={() => onCalculateFine(loan)}
-                                        className="flex items-center px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
-                                    >
-                                        <DollarSign className="h-4 w-4 mr-2" />
-                                        Ver Multas
                                     </button>
                                 </div>
                             </div>

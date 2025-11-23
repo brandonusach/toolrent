@@ -3,7 +3,6 @@ import { useKeycloak } from "@react-keycloak/web";
 
 // Importa los nuevos componentes
 import Sidebar from './Sidebar';
-import Header from './Header';
 import DashboardView from './DashboardView';
 import AccessDenied from './AccessDenied';
 import Placeholder from './Placeholder';
@@ -70,7 +69,6 @@ const AdminPanel = () => {
                 handleLogout={handleLogout}
             />
             <div className="flex-1 flex flex-col overflow-hidden">
-                <Header user={user} isAdmin={isAdmin} />
                 <main className="flex-1 p-6 lg:p-8 overflow-auto">
                     {/* Contenedor con animación de entrada */}
                     <div className="animate-fadeIn">

@@ -1,11 +1,10 @@
 import React from 'react';
-import { Eye, Edit, Trash2, UserCheck, UserX, MoreHorizontal } from 'lucide-react';
+import { Eye, Edit, Trash2, UserX } from 'lucide-react';
 
 const ClientList = ({
                         clients = [],
                         onViewClient,
                         onEditClient,
-                        onChangeStatus,
                         onDeleteClient,
                         isAdmin = false
                     }) => {
@@ -149,20 +148,6 @@ const ClientList = ({
                                         </button>
                                     )}
 
-                                    {/* Cambiar estado - solo admin */}
-                                    {isAdmin && (
-                                        <button
-                                            onClick={() => onChangeStatus(client)}
-                                            className={`p-2 hover:bg-gray-700 rounded-lg transition-colors duration-200 ${
-                                                client.status === 'ACTIVE'
-                                                    ? 'text-gray-400 hover:text-red-400'
-                                                    : 'text-gray-400 hover:text-green-400'
-                                            }`}
-                                            title={client.status === 'ACTIVE' ? 'Restringir cliente' : 'Activar cliente'}
-                                        >
-                                            {client.status === 'ACTIVE' ? <UserX size={16} /> : <UserCheck size={16} />}
-                                        </button>
-                                    )}
 
                                     {/* Eliminar - solo admin */}
                                     {isAdmin && (

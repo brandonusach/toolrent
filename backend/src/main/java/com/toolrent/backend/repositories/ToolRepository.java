@@ -12,6 +12,14 @@ import java.util.Optional;
 @Repository
 public interface ToolRepository extends JpaRepository<ToolEntity, Long> {
 
+
+    @Query("SELECT t FROM ToolEntity t LEFT JOIN FETCH t.category WHERE t.id = :id")
+    Optional<ToolEntity> findByIdWithCategory(@Param("id") Long id);
+
+
+    @Query("SELECT t FROM ToolEntity t LEFT JOIN FETCH t.category")
+    List<ToolEntity> findAllWithCategories();
+
     // Find tools by name
     List<ToolEntity> findByNameContainingIgnoreCase(String name);
 
@@ -25,11 +33,11 @@ public interface ToolRepository extends JpaRepository<ToolEntity, Long> {
     List<ToolEntity> findByStatus(ToolEntity.ToolStatus status);
 
     // Find available tools (status = AVAILABLE and currentStock > 0)
-    @Query("SELECT t FROM ToolEntity t WHERE t.status = 'AVAILABLE' AND t.currentStock > 0")
+    @Query("SELECT t FROM ToolEntity t LEFT JOIN FETCH t.category WHERE t.status = 'AVAILABLE' AND t.currentStock > 0")
     List<ToolEntity> findAvailableTools();
 
     // Find tools with low stock (currentStock <= threshold)
-    @Query("SELECT t FROM ToolEntity t WHERE t.currentStock <= :threshold")
+    @Query("SELECT t FROM ToolEntity t LEFT JOIN FETCH t.category WHERE t.currentStock <= :threshold")
     List<ToolEntity> findLowStockTools(@Param("threshold") Integer threshold);
 
     // Check if tool name exists
@@ -45,10 +53,10 @@ public interface ToolRepository extends JpaRepository<ToolEntity, Long> {
     Optional<ToolEntity> findByNameIgnoreCaseAndCategory(String name, CategoryEntity category);
 
     // Get tools ordered by current stock (descending)
-    @Query("SELECT t FROM ToolEntity t ORDER BY t.currentStock DESC")
+    @Query("SELECT t FROM ToolEntity t LEFT JOIN FETCH t.category ORDER BY t.currentStock DESC")
     List<ToolEntity> findAllOrderByCurrentStockDesc();
 
     // Get tools with stock greater than zero
-    @Query("SELECT t FROM ToolEntity t WHERE t.currentStock > 0")
+    @Query("SELECT t FROM ToolEntity t LEFT JOIN FETCH t.category WHERE t.currentStock > 0")
     List<ToolEntity> findToolsWithStock();
 }

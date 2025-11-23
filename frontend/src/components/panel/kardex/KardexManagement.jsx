@@ -1,15 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, Calendar, BarChart3, AlertCircle, CheckCircle, Eye } from 'lucide-react';
+import { BarChart3, AlertCircle, CheckCircle, Eye } from 'lucide-react';
 import { useKardex } from './hooks/useKardex';
 import { useTools } from '../inventory/hooks/useTools';
 import MovementsList from './components/MovementsList';
 import MovementDetail from './components/MovementDetail';
 import KardexByTool from './components/KardexByTool';
-import DateRangeReport from './components/DateRangeReport';
 import MovementFilters from './components/MovementFilters';
 
 const KardexManagement = () => {
-    const [activeView, setActiveView] = useState('list'); // 'list', 'byTool', 'dateRange', 'detail'
+    const [activeView, setActiveView] = useState('list'); // 'list', 'byTool', 'detail'
     const [selectedMovement, setSelectedMovement] = useState(null);
     const [selectedTool, setSelectedTool] = useState(null);
     const [filters, setFilters] = useState({
@@ -21,7 +20,6 @@ const KardexManagement = () => {
     });
 
     const {
-        movements,
         loading,
         error,
         loadMovements,
@@ -38,7 +36,7 @@ const KardexManagement = () => {
     }, [loadMovements, loadTools]);
 
     // Get filtered movements
-    const filteredMovements = filterMovements(filters.search, filters.type, filters.tool);
+    const filteredMovements = filterMovements(filters.search, filters.type, filters.tool, filters.dateStart, filters.dateEnd);
 
     // Get statistics
     const stats = getMovementStatistics();
@@ -88,17 +86,6 @@ const KardexManagement = () => {
                     >
                         <BarChart3 className="w-4 h-4" />
                         Por Herramienta
-                    </button>
-                    <button
-                        onClick={() => setActiveView('dateRange')}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors ${
-                            activeView === 'dateRange'
-                                ? 'bg-blue-600 text-white'
-                                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                        }`}
-                    >
-                        <Calendar className="w-4 h-4" />
-                        Por Fechas
                     </button>
                 </div>
             </div>
@@ -204,13 +191,6 @@ const KardexManagement = () => {
                         tools={tools}
                         selectedTool={selectedTool}
                         onSelectTool={setSelectedTool}
-                        onViewDetail={handleViewDetail}
-                    />
-                );
-
-            case 'dateRange':
-                return (
-                    <DateRangeReport
                         onViewDetail={handleViewDetail}
                     />
                 );

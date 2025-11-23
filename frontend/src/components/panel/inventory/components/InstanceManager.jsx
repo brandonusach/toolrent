@@ -1,11 +1,10 @@
-// inventory/components/InstanceManager.jsx - PURE VERSION
+// inventory/components/InstanceManager.jsx - PURE VERSION with Repair Functionality
 import React, { useState, useEffect } from 'react';
-import { X, Package, Trash2, AlertTriangle, RefreshCw } from 'lucide-react';
+import { X, Package, AlertTriangle, RefreshCw, Wrench, CheckCircle } from 'lucide-react';
 
-const InstanceManager = ({ tool, onClose, onInstanceUpdate }) => {
+const InstanceManager = ({ tool, onClose }) => {
     const [instances, setInstances] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [updating, setUpdating] = useState(false);
 
     const API_BASE = 'http://localhost:8081/api';
 
@@ -57,57 +56,29 @@ const InstanceManager = ({ tool, onClose, onInstanceUpdate }) => {
         }
     };
 
-    const handleUpdateStatus = async (instanceId, newStatus) => {
-        setUpdating(true);
-        try {
-            const response = await fetch(`${API_BASE}/tool-instances/${instanceId}/status`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ status: newStatus }),
-            });
-
-            if (response.ok) {
-                await loadInstances();
-                onInstanceUpdate(); // Update main inventory
-                alert('Estado actualizado exitosamente');
-            } else {
-                const errorText = await response.text();
-                alert(`Error: ${errorText}`);
-            }
-        } catch (error) {
-            console.error('Error updating status:', error);
-            alert('Error al actualizar el estado');
-        } finally {
-            setUpdating(false);
-        }
-    };
-
-    const handleDeleteInstance = async (instanceId) => {
-        if (!window.confirm('¿Está seguro de eliminar esta instancia permanentemente?')) {
+    const handleRepairInstance = async (instanceId) => {
+        if (!confirm('¿Está seguro de marcar esta instancia como reparada? Esto la hará disponible nuevamente.')) {
             return;
         }
 
-        setUpdating(true);
         try {
-            const response = await fetch(`${API_BASE}/tool-instances/${instanceId}`, {
-                method: 'DELETE'
+            const response = await fetch(`${API_BASE}/tool-instances/${instanceId}/repair`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
             });
 
             if (response.ok) {
-                await loadInstances();
-                onInstanceUpdate(); // Update main inventory
-                alert('Instancia eliminada exitosamente');
+                alert('✅ Instancia reparada exitosamente. La herramienta está disponible nuevamente.');
+                loadInstances(); // Reload instances to reflect changes
             } else {
-                const errorText = await response.text();
-                alert(`Error: ${errorText}`);
+                const errorData = await response.text();
+                alert(`❌ Error al reparar instancia: ${errorData}`);
             }
         } catch (error) {
-            console.error('Error deleting instance:', error);
-            alert('Error al eliminar la instancia');
-        } finally {
-            setUpdating(false);
+            console.error('Error repairing instance:', error);
+            alert('❌ Error de conexión al reparar instancia');
         }
     };
 
@@ -160,16 +131,16 @@ const InstanceManager = ({ tool, onClose, onInstanceUpdate }) => {
                 <div className="flex justify-between items-center mb-6">
                     <div>
                         <h3 className="text-2xl font-bold text-white">
-                            Instancias de: {tool?.name}
+                            Herramientas de: {tool?.name}
                         </h3>
                         <p className="text-gray-400 mt-1">
-                            Total: {instances.length} instancias - Stock Actual: {tool?.currentStock || 0}
+                            Total: {instances.length} herramientas - Stock Actual: {tool?.currentStock || 0}
                         </p>
                     </div>
                     <div className="flex items-center space-x-3">
                         <button
                             onClick={loadInstances}
-                            disabled={loading || updating}
+                            disabled={loading}
                             className="p-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-50"
                             title="Actualizar"
                         >
@@ -210,14 +181,14 @@ const InstanceManager = ({ tool, onClose, onInstanceUpdate }) => {
                     {loading ? (
                         <div className="text-center py-8">
                             <RefreshCw className="h-8 w-8 text-gray-400 mx-auto mb-4 animate-spin" />
-                            <p className="text-gray-400">Cargando instancias...</p>
+                            <p className="text-gray-400">Cargando herramientas...</p>
                         </div>
                     ) : instances.length === 0 ? (
                         <div className="text-center py-12">
                             <Package className="h-12 w-12 text-gray-500 mx-auto mb-4" />
-                            <p className="text-gray-400">No hay instancias registradas</p>
+                            <p className="text-gray-400">No hay herramientas registradas</p>
                             <p className="text-gray-500 text-sm mt-2">
-                                Las instancias se crean automáticamente al agregar stock
+                                Las herramientas se crean automáticamente al agregar stock
                             </p>
                         </div>
                     ) : (
@@ -240,47 +211,41 @@ const InstanceManager = ({ tool, onClose, onInstanceUpdate }) => {
                                             </div>
                                         </div>
 
-                                        {/* Status and Actions */}
-                                        <div className="flex flex-col sm:flex-row items-start sm:items-center space-y-2 sm:space-y-0 sm:space-x-3">
-                                            {/* Status Selector */}
-                                            <div className="flex items-center space-x-2">
-                                                <span className="text-sm text-gray-300">Estado:</span>
-                                                <select
-                                                    value={instance.status}
-                                                    onChange={(e) => handleUpdateStatus(instance.id, e.target.value)}
-                                                    disabled={updating}
-                                                    className="text-xs px-3 py-1 bg-gray-600 border border-gray-500 rounded text-white focus:outline-none focus:border-orange-500 disabled:opacity-50"
-                                                >
-                                                    <option value="AVAILABLE">Disponible</option>
-                                                    <option value="LOANED">Prestada</option>
-                                                    <option value="UNDER_REPAIR">En Reparación</option>
-                                                    <option value="DECOMMISSIONED">Dada de Baja</option>
-                                                </select>
-                                            </div>
-
-                                            {/* Current Status Badge */}
+                                        {/* Status Display and Actions */}
+                                        <div className="flex items-center space-x-3">
                                             <span className={`px-3 py-1 rounded-full text-xs font-medium ${getStatusColor(instance.status)}`}>
                                                 {getStatusText(instance.status)}
                                             </span>
 
-                                            {/* Delete Button */}
-                                            <button
-                                                onClick={() => handleDeleteInstance(instance.id)}
-                                                disabled={updating}
-                                                className="text-red-400 hover:text-red-300 p-1 rounded transition-colors disabled:opacity-50"
-                                                title="Eliminar Instancia"
-                                            >
-                                                <Trash2 className="h-4 w-4" />
-                                            </button>
+                                            {/* Repair Button - Only for UNDER_REPAIR status */}
+                                            {instance.status === 'UNDER_REPAIR' && (
+                                                <button
+                                                    onClick={() => handleRepairInstance(instance.id)}
+                                                    className="flex items-center space-x-1 px-3 py-1 bg-green-600 hover:bg-green-700 text-white rounded-lg text-xs font-medium transition-colors"
+                                                    title="Marcar como reparada"
+                                                >
+                                                    <Wrench className="h-3 w-3" />
+                                                    <span>Reparar</span>
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
 
-                                    {/* Loan Warning */}
+                                    {/* Status Warnings */}
                                     {instance.status === 'LOANED' && (
                                         <div className="flex items-center mt-3 p-2 bg-blue-900 bg-opacity-30 rounded">
                                             <AlertTriangle className="h-4 w-4 text-blue-400 mr-2 flex-shrink-0" />
                                             <span className="text-blue-300 text-xs">
                                                 Esta instancia está actualmente prestada
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {instance.status === 'UNDER_REPAIR' && (
+                                        <div className="flex items-center mt-3 p-2 bg-yellow-900 bg-opacity-30 rounded">
+                                            <Wrench className="h-4 w-4 text-yellow-400 mr-2 flex-shrink-0" />
+                                            <span className="text-yellow-300 text-xs">
+                                                Esta instancia fue devuelta con daños. Márquela como reparada cuando esté lista.
                                             </span>
                                         </div>
                                     )}
@@ -294,7 +259,7 @@ const InstanceManager = ({ tool, onClose, onInstanceUpdate }) => {
                 <div className="mt-6 pt-4 border-t border-gray-700">
                     <div className="flex flex-col sm:flex-row sm:justify-between items-start sm:items-center text-sm text-gray-400 space-y-1 sm:space-y-0">
                         <span>
-                            {instances.length > 0 && `Mostrando ${instances.length} instancia${instances.length !== 1 ? 's' : ''}`}
+                            {instances.length > 0 && `Mostrando ${instances.length} herramienta${instances.length !== 1 ? 's' : ''}`}
                         </span>
                         <span>
                             Última actualización: {new Date().toLocaleTimeString()}

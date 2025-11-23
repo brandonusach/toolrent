@@ -1,6 +1,7 @@
 // hooks/useReports.js - Hook simplificado sin filtros de fecha ni exportación
 import { useState, useCallback } from 'react';
 import api from "../../../../http-common";
+import { formatDateCompact, getTodayDate } from '../../../../utils/dateUtils';
 
 export const useReports = () => {
     const [loading, setLoading] = useState(false);
@@ -110,6 +111,57 @@ export const useReports = () => {
         setError(null);
     }, []);
 
+    // Exportar a CSV con formato correcto de fechas
+    const exportToCSV = useCallback((data, filename) => {
+        if (!data || data.length === 0) {
+            console.error('No hay datos para exportar');
+            return;
+        }
+
+        // Obtener las columnas del primer objeto
+        const headers = Object.keys(data[0]);
+
+        // Función helper para formatear valores
+        const formatValue = (key, value) => {
+            if (value === null || value === undefined) return '';
+
+            // Formatear fechas usando dateUtils
+            if (key.toLowerCase().includes('date') && typeof value === 'string') {
+                return formatDateCompact(value);
+            }
+
+            // Escapar valores con comas o comillas
+            const stringValue = String(value);
+            if (stringValue.includes(',') || stringValue.includes('"') || stringValue.includes('\n')) {
+                return `"${stringValue.replace(/"/g, '""')}"`;
+            }
+
+            return stringValue;
+        };
+
+        // Crear CSV
+        const csvRows = [];
+
+        // Agregar encabezados
+        csvRows.push(headers.join(','));
+
+        // Agregar datos
+        for (const row of data) {
+            const values = headers.map(header => formatValue(header, row[header]));
+            csvRows.push(values.join(','));
+        }
+
+        const csvContent = csvRows.join('\n');
+
+        // Crear y descargar archivo
+        const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `${filename}_${getTodayDate()}.csv`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+    }, []);
+
     return {
         loading,
         error,
@@ -118,6 +170,7 @@ export const useReports = () => {
         getOverdueClientsReport,
         getPopularToolsReport,
         generateGeneralSummary,
-        clearReportData
+        clearReportData,
+        exportToCSV
     };
 };

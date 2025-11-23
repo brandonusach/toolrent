@@ -1,6 +1,7 @@
 // ActiveLoansReport.jsx - RF6.1: Listar préstamos activos y estado (vigentes, atrasados)
 import React, { useState, useMemo } from 'react';
 import { RefreshCw, AlertTriangle, Search, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { formatDateLocal } from '../../../../utils/dateUtils';
 
 const ActiveLoansReport = ({ data, loading }) => {
     const [sortField, setSortField] = useState('daysOverdue');
@@ -287,10 +288,10 @@ const ActiveLoansReport = ({ data, loading }) => {
                                         {loan.quantity}
                                     </td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-300">
-                                        {new Date(loan.loanDate).toLocaleDateString('es-ES')}
+                                        {formatDateLocal(loan.loanDate)}
                                     </td>
                                     <td className="px-4 py-4 whitespace-nowrap text-sm text-slate-300">
-                                        {new Date(loan.agreedReturnDate).toLocaleDateString('es-ES')}
+                                        {formatDateLocal(loan.agreedReturnDate)}
                                     </td>
                                     <td className="px-4 py-4 whitespace-nowrap">
                                         {getStatusBadge(loan)}

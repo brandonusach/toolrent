@@ -4,7 +4,7 @@ import LoanForm from './components/LoanForm';
 import ReturnForm from './components/ReturnForm';
 import LoansList from './components/LoansList';
 import OverdueLoans from './components/OverdueLoans';
-import FineCalculator from './components/FineCalculator';
+import FineManagement from './components/FineManagement';
 import { useLoans } from './hooks/useLoans';
 import { useFines } from './hooks/useFines';
 import {
@@ -12,15 +12,14 @@ import {
     Plus,
     AlertTriangle,
     BarChart3,
-    Calendar,
     DollarSign
 } from 'lucide-react';
 
 const LoanManagement = () => {
     // Modal states
+    const [showFineModal, setShowFineModal] = useState(false);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [showReturnModal, setShowReturnModal] = useState(false);
-    const [showFineCalculator, setShowFineCalculator] = useState(false);
     const [selectedLoan, setSelectedLoan] = useState(null);
 
     // Tab state
@@ -43,10 +42,18 @@ const LoanManagement = () => {
 
     // Load initial data
     useEffect(() => {
-        loadActiveLoans();
+        loadLoans(); // Cargar todos los préstamos para el tab principal
+        loadActiveLoans(); // Para las estadísticas
         loadOverdueLoans();
         loadFines();
-    }, [loadActiveLoans, loadOverdueLoans, loadFines]);
+    }, [loadLoans, loadActiveLoans, loadOverdueLoans, loadFines]);
+
+    // Load data when tab changes
+    useEffect(() => {
+        if (activeTab === 'active') {
+            loadLoans(); // Recargar todos los préstamos
+        }
+    }, [activeTab, loadLoans]);
 
     // Modal handlers
     const handleCreateLoan = () => {
@@ -58,35 +65,36 @@ const LoanManagement = () => {
         setShowReturnModal(true);
     };
 
-    const handleShowFineCalculator = (loan = null) => {
-        setSelectedLoan(loan);
-        setShowFineCalculator(true);
+    const handleManageFines = () => {
+        setShowFineModal(true);
     };
 
     const closeAllModals = () => {
         setShowCreateModal(false);
         setShowReturnModal(false);
-        setShowFineCalculator(false);
+        setShowFineModal(false);
         setSelectedLoan(null);
     };
 
     // CRUD handlers
     const handleLoanCreated = async () => {
-        await loadActiveLoans();
+        await loadLoans(); // Recargar todos los préstamos
+        await loadActiveLoans(); // Recargar estadísticas
         closeAllModals();
     };
 
     const handleLoanReturned = async () => {
-        await loadActiveLoans();
+        await loadLoans(); // Recargar todos los préstamos
+        await loadActiveLoans(); // Recargar estadísticas
         await loadOverdueLoans();
         closeAllModals();
     };
 
     const refreshData = async () => {
         await Promise.all([
-            loadActiveLoans(),
-            loadOverdueLoans(),
-            activeTab === 'history' ? loadLoans() : Promise.resolve()
+            loadLoans(), // Cargar todos los préstamos
+            loadActiveLoans(), // Para las estadísticas
+            loadOverdueLoans()
         ]);
     };
 
@@ -121,6 +129,13 @@ const LoanManagement = () => {
                             Nuevo Préstamo
                         </button>
                         <button
+                            onClick={handleManageFines}
+                            className="flex items-center px-4 py-2 bg-yellow-600 text-white rounded-lg hover:bg-yellow-700 transition-colors"
+                        >
+                            <DollarSign className="h-5 w-5 mr-2" />
+                            Gestionar Multas
+                        </button>
+                        <button
                             onClick={refreshData}
                             disabled={loading}
                             className="flex items-center px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors disabled:opacity-50"
@@ -132,7 +147,7 @@ const LoanManagement = () => {
                 </div>
 
                 {/* Quick Stats */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-gray-800 rounded-lg p-4 border border-gray-700">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-gray-800 rounded-lg p-4 border border-gray-700">
                     <div className="text-center">
                         <div className="text-2xl font-bold text-blue-400">{displayStats.totalActive}</div>
                         <div className="text-sm text-gray-400">Préstamos Activos</div>
@@ -145,15 +160,6 @@ const LoanManagement = () => {
                         <div className="text-2xl font-bold text-orange-400">{displayStats.overdueRate}%</div>
                         <div className="text-sm text-gray-400">Tasa de Atraso</div>
                     </div>
-                    <div className="text-center">
-                        <button
-                            onClick={() => handleShowFineCalculator()}
-                            className="flex items-center justify-center mx-auto px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors"
-                        >
-                            <DollarSign className="h-4 w-4 mr-1" />
-                            Calculadora Multas
-                        </button>
-                    </div>
                 </div>
             </div>
 
@@ -161,7 +167,7 @@ const LoanManagement = () => {
             <div className="mb-6">
                 <div className="flex space-x-1 bg-gray-800 p-1 rounded-lg border border-gray-700">
                     {[
-                        { id: 'active', label: 'Préstamos Activos', icon: RefreshCw },
+                        { id: 'active', label: 'Préstamos', icon: RefreshCw },
                         { id: 'overdue', label: 'Atrasados', icon: AlertTriangle },
                         { id: 'history', label: 'Historial', icon: BarChart3 }
                     ].map((tab) => {
@@ -194,13 +200,12 @@ const LoanManagement = () => {
                 {/* Active Loans Tab */}
                 {activeTab === 'active' && (
                     <LoansList
-                        loans={activeLoans}
+                        loans={loans}
                         loading={loading}
-                        title="Préstamos Activos"
-                        emptyMessage="No hay préstamos activos"
+                        title="Lista de Préstamos"
+                        emptyMessage="No hay préstamos disponibles"
                         onReturnTool={handleReturnTool}
-                        onCalculateFine={handleShowFineCalculator}
-                        onRefresh={loadActiveLoans}
+                        onRefresh={loadLoans}
                         showReturnButton={true}
                     />
                 )}
@@ -211,7 +216,6 @@ const LoanManagement = () => {
                         loans={overdueLoans}
                         loading={loading}
                         onReturnTool={handleReturnTool}
-                        onCalculateFine={handleShowFineCalculator}
                         onRefresh={loadOverdueLoans}
                     />
                 )}
@@ -221,9 +225,8 @@ const LoanManagement = () => {
                     <LoansList
                         loans={loans}
                         loading={loading}
-                        title="Historial de Préstamos"
+                        title="Historial Completo de Préstamos"
                         emptyMessage="No hay préstamos en el historial"
-                        onCalculateFine={handleShowFineCalculator}
                         onRefresh={loadLoans}
                         showReturnButton={false}
                     />
@@ -249,11 +252,14 @@ const LoanManagement = () => {
                 />
             )}
 
-            {/* Modal: Fine Calculator */}
-            {showFineCalculator && (
-                <FineCalculator
-                    loan={selectedLoan}
-                    onClose={() => setShowFineCalculator(false)}
+            {/* Modal: Fine Management */}
+            {showFineModal && (
+                <FineManagement
+                    onClose={() => setShowFineModal(false)}
+                    onSuccess={() => {
+                        loadFines();
+                        refreshData();
+                    }}
                 />
             )}
         </div>

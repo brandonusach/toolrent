@@ -1,4 +1,4 @@
-// loans/components/LoansList.jsx - Lista de préstamos con filtros y acciones
+// loans/components/LoansList.jsx - VERSIÓN CORREGIDA con formateo de fechas
 import React, { useState, useMemo } from 'react';
 import {
     Search,
@@ -13,6 +13,7 @@ import {
     Clock,
     Loader
 } from 'lucide-react';
+import { formatDateLocal, daysBetween } from '../../../../utils/dateUtils';
 
 const LoansList = ({
                        loans,
@@ -20,7 +21,6 @@ const LoansList = ({
                        title = "Lista de Préstamos",
                        emptyMessage = "No hay préstamos",
                        onReturnTool,
-                       onCalculateFine,
                        onRefresh,
                        showReturnButton = false
                    }) => {
@@ -39,7 +39,17 @@ const LoansList = ({
                 loan.tool?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
                 loan.id?.toString().includes(searchTerm);
 
-            const matchesStatus = statusFilter === 'all' || loan.status === statusFilter;
+            // 🔧 CORRECCIÓN: Filtro de préstamos atrasados
+            // Los préstamos atrasados son aquellos ACTIVOS con fecha vencida
+            // El estado OVERDUE solo se usa para préstamos ya devueltos con retraso
+            let matchesStatus = true;
+            if (statusFilter === 'OVERDUE') {
+                // Préstamos atrasados: ACTIVOS y con fecha de devolución vencida
+                const today = new Date().toISOString().split('T')[0];
+                matchesStatus = loan.status === 'ACTIVE' && loan.agreedReturnDate < today;
+            } else if (statusFilter !== 'all') {
+                matchesStatus = loan.status === statusFilter;
+            }
 
             return matchesSearch && matchesStatus;
         });
@@ -93,23 +103,13 @@ const LoansList = ({
 
     const isOverdue = (loan) => {
         if (loan.status !== 'ACTIVE') return false;
-        return new Date() > new Date(loan.agreedReturnDate);
+        const today = new Date().toISOString().split('T')[0];
+        return loan.agreedReturnDate < today;
     };
 
     const getDaysUntilReturn = (loan) => {
-        const today = new Date();
-        const returnDate = new Date(loan.agreedReturnDate);
-        const diffTime = returnDate - today;
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        return diffDays;
-    };
-
-    const formatDate = (dateString) => {
-        return new Date(dateString).toLocaleDateString('es-ES', {
-            year: 'numeric',
-            month: 'short',
-            day: 'numeric'
-        });
+        const today = new Date().toISOString().split('T')[0];
+        return daysBetween(today, loan.agreedReturnDate);
     };
 
     const handleSort = (field) => {
@@ -256,7 +256,6 @@ const LoansList = ({
                                                     Herramienta:
                                                 </span>
                                                 <p className="text-white font-medium">{loan.tool?.name}</p>
-                                                <p className="text-gray-400 text-xs">Cantidad: {loan.quantity}</p>
                                             </div>
 
                                             <div>
@@ -265,14 +264,14 @@ const LoansList = ({
                                                     Fechas:
                                                 </span>
                                                 <p className="text-white text-xs">
-                                                    Préstamo: {formatDate(loan.loanDate)}
+                                                    Préstamo: {formatDateLocal(loan.loanDate)}
                                                 </p>
                                                 <p className="text-white text-xs">
-                                                    Devolución: {formatDate(loan.agreedReturnDate)}
+                                                    Devolución: {formatDateLocal(loan.agreedReturnDate)}
                                                 </p>
                                                 {loan.actualReturnDate && (
                                                     <p className="text-green-400 text-xs">
-                                                        Devuelto: {formatDate(loan.actualReturnDate)}
+                                                        Devuelto: {formatDateLocal(loan.actualReturnDate)}
                                                     </p>
                                                 )}
                                             </div>
@@ -313,16 +312,6 @@ const LoansList = ({
                                             >
                                                 <Package2 className="h-4 w-4 mr-1" />
                                                 Devolver
-                                            </button>
-                                        )}
-
-                                        {onCalculateFine && (
-                                            <button
-                                                onClick={() => onCalculateFine(loan)}
-                                                className="flex items-center px-3 py-1 bg-purple-600 text-white rounded hover:bg-purple-700 transition-colors text-sm"
-                                            >
-                                                <DollarSign className="h-4 w-4 mr-1" />
-                                                Multas
                                             </button>
                                         )}
                                     </div>

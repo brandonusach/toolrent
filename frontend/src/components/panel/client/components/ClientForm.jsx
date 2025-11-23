@@ -11,8 +11,7 @@ const ClientForm = ({
         name: '',
         rut: '',
         phone: '',
-        email: '',
-        status: 'ACTIVE'
+        email: ''
     });
 
     // Solo errores del servidor, no validaciones frontend
@@ -26,8 +25,7 @@ const ClientForm = ({
                 name: client.name || '',
                 rut: client.rut || '',
                 phone: client.phone || '',
-                email: client.email || '',
-                status: client.status || 'ACTIVE'
+                email: client.email || ''
             });
         }
     }, [mode, client]);
@@ -112,39 +110,41 @@ const ClientForm = ({
         try {
             // Enviar datos directamente al backend sin validaciones frontend
             // El backend se encarga de toda la validación y normalización
-            await onSubmit(formData);
-        } catch (error) {
-            // Manejar errores del servidor
-            console.error('Server error:', error);
+            // En modo edición, no se envía el RUT
+            const dataToSubmit = mode === 'edit'
+                ? { name: formData.name, phone: formData.phone, email: formData.email }
+                : formData;
 
-            // Si el error contiene información específica de campos
+            await onSubmit(dataToSubmit);
+            onClose(); // Cerrar el modal solo si tiene éxito
+        } catch (error) {
+            // Manejar errores del servidor igual que ToolForm
+            console.error('Error submitting form:', error);
+            console.log('Error completo:', JSON.stringify(error, null, 2));
+            console.log('Error.response:', error.response);
+            console.log('Error.response.data:', error.response?.data);
+
             if (error.response && error.response.data) {
                 const errorData = error.response.data;
+                console.log('Tipo de errorData:', typeof errorData);
+                console.log('errorData:', errorData);
+                console.log('errorData.fieldErrors:', errorData.fieldErrors);
 
-                // Parsear errores del backend por campo
-                const fieldErrors = {};
-                if (typeof errorData === 'string') {
-                    // Error general del servidor
-                    if (errorData.includes('RUT')) {
-                        fieldErrors.rut = errorData;
-                    } else if (errorData.includes('teléfono') || errorData.includes('telefono')) {
-                        fieldErrors.phone = errorData;
-                    } else if (errorData.includes('email') || errorData.includes('correo')) {
-                        fieldErrors.email = errorData;
-                    } else if (errorData.includes('nombre')) {
-                        fieldErrors.name = errorData;
-                    } else {
-                        fieldErrors.general = errorData;
-                    }
-                } else if (errorData.errors) {
-                    // Si el backend envía errores estructurados
-                    Object.assign(fieldErrors, errorData.errors);
+                // Si el backend envía fieldErrors (mismo formato que ToolForm)
+                if (typeof errorData === 'object' && errorData.fieldErrors) {
+                    console.log('✅ Usando fieldErrors:', errorData.fieldErrors);
+                    setServerErrors(errorData.fieldErrors);
+                } else if (typeof errorData === 'string') {
+                    // Mostrar error en alert igual que ToolForm
+                    console.log('⚠️ errorData es string:', errorData);
+                    alert(`Error: ${errorData}`);
+                } else {
+                    console.log('❌ errorData no reconocido');
+                    alert('Error: Error desconocido del servidor');
                 }
-
-                setServerErrors(fieldErrors);
             } else {
-                // Error genérico
-                setServerErrors({ general: 'Error al procesar la solicitud. Intente nuevamente.' });
+                console.log('❌ No hay error.response.data, usando error.message');
+                alert(`Error: ${error.message || 'Error desconocido'}`);
             }
         } finally {
             setIsSubmitting(false);
@@ -152,8 +152,8 @@ const ClientForm = ({
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-gray-800 rounded-xl max-w-md w-full border border-gray-700">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 py-8 px-4">
+            <div className="bg-gray-800 rounded-xl max-w-lg w-full border border-gray-700 max-h-[85vh] overflow-y-auto my-auto">
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-gray-700">
                     <h2 className="text-xl font-bold text-white">
@@ -183,16 +183,21 @@ const ClientForm = ({
                     <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
                             <User size={16} className="inline mr-2" />
-                            Nombre Completo
+                            Nombre Completo *
                         </label>
                         <input
                             type="text"
                             name="name"
+                            required
+                            minLength={2}
+                            maxLength={100}
                             value={formData.name}
                             onChange={handleInputChange}
-                            className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
-                                serverErrors.name ? 'border-red-500' : 'border-gray-600'
-                            }`}
+                            className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 ${
+                                serverErrors.name 
+                                    ? 'border-red-500 focus:ring-red-500' 
+                                    : 'border-gray-600 focus:ring-blue-500'
+                            } transition-colors`}
                             placeholder="Ingrese el nombre completo"
                             disabled={isSubmitting}
                         />
@@ -202,24 +207,32 @@ const ClientForm = ({
                                 {serverErrors.name}
                             </p>
                         )}
+                        {!serverErrors.name && (
+                            <p className="text-gray-400 text-xs mt-1">Mínimo 2 caracteres</p>
+                        )}
                     </div>
 
                     {/* RUT - Sin formateo frontend, el backend lo maneja */}
                     <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
                             <Hash size={16} className="inline mr-2" />
-                            RUT
+                            RUT *
                         </label>
                         <input
                             type="text"
                             name="rut"
+                            required
+                            minLength={7}
+                            maxLength={12}
                             value={formData.rut}
                             onChange={handleInputChange}
-                            className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
-                                serverErrors.rut ? 'border-red-500' : 'border-gray-600'
-                            }`}
+                            className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 ${
+                                serverErrors.rut 
+                                    ? 'border-red-500 focus:ring-red-500' 
+                                    : 'border-gray-600 focus:ring-blue-500'
+                            } ${mode === 'edit' ? 'opacity-60 cursor-not-allowed' : ''} transition-colors`}
                             placeholder="Ej: 12345678-9 o 12.345.678-9"
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || mode === 'edit'}
                         />
                         {serverErrors.rut && (
                             <p className="mt-1 text-sm text-red-400 flex items-center">
@@ -227,22 +240,33 @@ const ClientForm = ({
                                 {serverErrors.rut}
                             </p>
                         )}
+                        {!serverErrors.rut && mode === 'create' && (
+                            <p className="text-gray-400 text-xs mt-1">Formato: 12.345.678-9</p>
+                        )}
+                        {!serverErrors.rut && mode === 'edit' && (
+                            <p className="text-gray-400 text-xs mt-1">El RUT no se puede modificar</p>
+                        )}
                     </div>
 
                     {/* Teléfono - Sin formateo frontend, el backend lo maneja */}
                     <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
                             <Phone size={16} className="inline mr-2" />
-                            Teléfono
+                            Teléfono *
                         </label>
                         <input
                             type="text"
                             name="phone"
+                            required
+                            minLength={8}
+                            maxLength={15}
                             value={formData.phone}
                             onChange={handleInputChange}
-                            className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
-                                serverErrors.phone ? 'border-red-500' : 'border-gray-600'
-                            }`}
+                            className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 ${
+                                serverErrors.phone 
+                                    ? 'border-red-500 focus:ring-red-500' 
+                                    : 'border-gray-600 focus:ring-blue-500'
+                            } transition-colors`}
                             placeholder="Ej: 912345678, +56912345678, 221234567"
                             disabled={isSubmitting}
                         />
@@ -252,22 +276,28 @@ const ClientForm = ({
                                 {serverErrors.phone}
                             </p>
                         )}
+                        {!serverErrors.phone && (
+                            <p className="text-gray-400 text-xs mt-1">Celular o fijo chileno</p>
+                        )}
                     </div>
 
-                    {/* Email - Sin validación frontend */}
+                    {/* Email - Validación HTML5 básica */}
                     <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">
                             <Mail size={16} className="inline mr-2" />
-                            Email
+                            Email *
                         </label>
                         <input
-                            type="text"
+                            type="email"
                             name="email"
+                            required
                             value={formData.email}
                             onChange={handleInputChange}
-                            className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors ${
-                                serverErrors.email ? 'border-red-500' : 'border-gray-600'
-                            }`}
+                            className={`w-full px-3 py-2 bg-gray-700 border rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 ${
+                                serverErrors.email 
+                                    ? 'border-red-500 focus:ring-red-500' 
+                                    : 'border-gray-600 focus:ring-blue-500'
+                            } transition-colors`}
                             placeholder="cliente@email.com"
                             disabled={isSubmitting}
                         />
@@ -277,26 +307,11 @@ const ClientForm = ({
                                 {serverErrors.email}
                             </p>
                         )}
+                        {!serverErrors.email && (
+                            <p className="text-gray-400 text-xs mt-1">Formato válido de correo electrónico</p>
+                        )}
                     </div>
 
-                    {/* Estado - solo en modo edición */}
-                    {mode === 'edit' && (
-                        <div>
-                            <label className="block text-sm font-medium text-gray-300 mb-2">
-                                Estado
-                            </label>
-                            <select
-                                name="status"
-                                value={formData.status}
-                                onChange={handleInputChange}
-                                className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-colors"
-                                disabled={isSubmitting}
-                            >
-                                <option value="ACTIVE">Activo</option>
-                                <option value="RESTRICTED">Restringido</option>
-                            </select>
-                        </div>
-                    )}
 
                     {/* Botones */}
                     <div className="flex space-x-3 pt-4">

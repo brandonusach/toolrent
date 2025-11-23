@@ -77,8 +77,8 @@ const ClientStatus = ({
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-gray-800 rounded-xl max-w-md w-full border border-gray-700 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 py-8 px-4">
+            <div className="bg-gray-800 rounded-xl max-w-md w-full border border-gray-700 max-h-[85vh] overflow-y-auto my-auto">
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-gray-700">
                     <h2 className="text-xl font-bold text-white">

@@ -1,7 +1,16 @@
 import React from 'react';
 import { ArrowLeft, Package, User, Calendar, FileText, TrendingUp, TrendingDown, RotateCcw, AlertCircle } from 'lucide-react';
+import { formatDateTime } from '../../../../utils/dateUtils';
 
 const MovementDetail = ({ movement, onBack }) => {
+    // Debug: Verificar que toolId corresponde al ID de la herramienta
+    console.log('🔍 MovementDetail - Datos del movimiento:', {
+        movementId: movement?.id,
+        toolId: movement?.toolId,
+        toolName: movement?.toolName,
+        toolObject: movement?.tool
+    });
+
     if (!movement) {
         return (
             <div className="bg-slate-800/50 backdrop-blur rounded-lg border border-slate-700/50 p-8 text-center">
@@ -18,16 +27,6 @@ const MovementDetail = ({ movement, onBack }) => {
         );
     }
 
-    const formatDateTime = (dateTime) => {
-        return new Date(dateTime).toLocaleString('es-CL', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        });
-    };
 
     const getMovementColor = (type) => {
         const colors = {
@@ -39,6 +38,28 @@ const MovementDetail = ({ movement, onBack }) => {
             RESTOCK: 'bg-purple-500/20 text-purple-400 border-purple-500/50'
         };
         return colors[type] || 'bg-slate-500/20 text-slate-400 border-slate-500/50';
+    };
+
+    const getToolStatusBadge = (status) => {
+        const badges = {
+            AVAILABLE: 'bg-green-500/10 text-green-400 border-green-500/30',
+            LOANED: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+            IN_REPAIR: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
+            DECOMMISSIONED: 'bg-gray-500/10 text-gray-400 border-gray-500/30',
+            PARTIALLY_AVAILABLE: 'bg-orange-500/10 text-orange-400 border-orange-500/30'
+        };
+        return badges[status] || 'bg-slate-500/10 text-slate-400 border-slate-500/30';
+    };
+
+    const getToolStatusLabel = (status) => {
+        const labels = {
+            AVAILABLE: 'Disponible',
+            LOANED: 'Prestada',
+            IN_REPAIR: 'En Reparación',
+            DECOMMISSIONED: 'Dada de Baja',
+            PARTIALLY_AVAILABLE: 'Parcialmente Disponible'
+        };
+        return labels[status] || status;
     };
 
     const getMovementLabel = (type) => {
@@ -136,10 +157,21 @@ const MovementDetail = ({ movement, onBack }) => {
                                 <Package className="w-4 h-4 text-slate-500" />
                                 <div>
                                     <p className="text-slate-100 font-medium">
-                                        {movement.tool?.name || 'Herramienta no especificada'}
+                                        {movement.toolName || movement.tool?.name || 'Herramienta no especificada'}
                                     </p>
-                                    {movement.tool?.category && (
-                                        <p className="text-sm text-slate-400">{movement.tool.category.name}</p>
+                                    {movement.toolInstanceId ? (
+                                        <p className="text-sm text-slate-500">
+                                            Herramienta: <span className="text-blue-400 font-semibold">#{movement.toolInstanceId}</span>
+                                        </p>
+                                    ) : (
+                                        <p className="text-sm text-slate-500">
+                                            ID: #{movement.toolId || movement.tool?.id || 'N/A'}
+                                        </p>
+                                    )}
+                                    {(movement.categoryName || movement.tool?.category?.name) && (
+                                        <p className="text-sm text-slate-400">
+                                            {movement.categoryName || movement.tool.category.name}
+                                        </p>
                                     )}
                                 </div>
                             </div>
@@ -166,6 +198,41 @@ const MovementDetail = ({ movement, onBack }) => {
                                 </span>
                             </div>
                         </div>
+
+                        {/* Alerta especial para BAJA y REPARACIÓN */}
+                        {(movement.type === 'DECOMMISSION' || movement.type === 'REPAIR') && (
+                            <div className={`${
+                                movement.type === 'DECOMMISSION' 
+                                    ? 'bg-red-500/10 border-red-500/30' 
+                                    : 'bg-yellow-500/10 border-yellow-500/30'
+                            } border rounded-lg p-3`}>
+                                <label className={`block text-sm font-medium mb-2 flex items-center gap-2 ${
+                                    movement.type === 'DECOMMISSION' ? 'text-red-400' : 'text-yellow-400'
+                                }`}>
+                                    <AlertCircle className="w-4 h-4" />
+                                    {movement.type === 'DECOMMISSION' ? 'Baja Permanente' : 'En Reparación'}
+                                </label>
+                                {movement.type === 'DECOMMISSION' ? (
+                                    <>
+                                        <p className="text-red-300 font-medium">
+                                            Instancias Dadas de Baja (Inoperativas)
+                                        </p>
+                                        <p className="text-xs text-red-400 mt-2">
+                                            ⚠️ Las instancias ya no están disponibles para préstamo y el stock NO se incrementó.
+                                        </p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p className="text-yellow-300 font-medium">
+                                            Herramienta en Reparación
+                                        </p>
+                                        <p className="text-xs text-yellow-400 mt-2">
+                                            🔧 La herramienta no está disponible temporalmente. El stock se restaurará al completar la reparación.
+                                        </p>
+                                    </>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
 
@@ -258,8 +325,8 @@ const MovementDetail = ({ movement, onBack }) => {
                     </h3>
 
                     <div className="space-y-4">
-                        {/* Related Loan */}
-                        {movement.relatedLoan ? (
+                        {/* Related Loan - Soporta tanto DTO (relatedLoanId) como entidad (relatedLoan) */}
+                        {(movement.relatedLoanId || movement.relatedLoan) ? (
                             <div>
                                 <label className="block text-sm font-medium text-slate-400 mb-2">
                                     Préstamo Relacionado
@@ -268,12 +335,12 @@ const MovementDetail = ({ movement, onBack }) => {
                                     <div className="flex items-center gap-2">
                                         <Package className="w-4 h-4 text-blue-400" />
                                         <span className="text-blue-400 font-medium">
-                                            Préstamo #{movement.relatedLoan.id}
+                                            Préstamo #{movement.relatedLoanId || movement.relatedLoan.id}
                                         </span>
                                     </div>
-                                    {movement.relatedLoan.client && (
+                                    {(movement.clientName || movement.relatedLoan?.client?.name) && (
                                         <p className="text-sm text-blue-300 mt-1">
-                                            Cliente: {movement.relatedLoan.client.name}
+                                            Cliente: {movement.clientName || movement.relatedLoan.client.name}
                                         </p>
                                     )}
                                 </div>
@@ -316,7 +383,7 @@ const MovementDetail = ({ movement, onBack }) => {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex justify-between items-center">
+            <div className="flex justify-start items-center">
                 <button
                     onClick={onBack}
                     className="flex items-center gap-2 px-6 py-3 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition-colors"
@@ -324,37 +391,6 @@ const MovementDetail = ({ movement, onBack }) => {
                     <ArrowLeft className="w-4 h-4" />
                     Volver a la Lista
                 </button>
-
-                <div className="flex gap-3">
-                    <button
-                        onClick={() => {
-                            // TODO: Implement print functionality
-                            window.print();
-                        }}
-                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-                    >
-                        Imprimir Detalle
-                    </button>
-
-                    <button
-                        onClick={() => {
-                            // TODO: Implement export functionality
-                            const data = JSON.stringify(movement, null, 2);
-                            const blob = new Blob([data], { type: 'application/json' });
-                            const url = URL.createObjectURL(blob);
-                            const a = document.createElement('a');
-                            a.href = url;
-                            a.download = `movement-${movement.id}.json`;
-                            document.body.appendChild(a);
-                            a.click();
-                            document.body.removeChild(a);
-                            URL.revokeObjectURL(url);
-                        }}
-                        className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
-                    >
-                        Exportar JSON
-                    </button>
-                </div>
             </div>
         </div>
     );

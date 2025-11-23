@@ -348,9 +348,20 @@ export const useKardex = () => {
         }
     }, []);
 
-    // Filter movements
-    const filterMovements = useCallback((searchTerm, typeFilter, toolFilter) => {
-        return movements.filter(movement => {
+    // Filter movements - Mejorado para incluir filtrado por fechas
+    const filterMovements = useCallback((searchTerm, typeFilter, toolFilter, dateStart = '', dateEnd = '') => {
+        console.log('=== KARDEX FILTER DEBUG ===');
+        console.log('Total movements:', movements.length);
+        console.log('Filters:', { searchTerm, typeFilter, toolFilter, dateStart, dateEnd });
+
+        // Contar movimientos por tipo
+        const typeCount = {};
+        movements.forEach(m => {
+            typeCount[m.type] = (typeCount[m.type] || 0) + 1;
+        });
+        console.log('Movements by type:', typeCount);
+
+        const filtered = movements.filter(movement => {
             const matchesSearch = !searchTerm ||
                 (movement.description && movement.description.toLowerCase().includes(searchTerm.toLowerCase())) ||
                 (movement.toolName && movement.toolName.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -360,8 +371,33 @@ export const useKardex = () => {
             const matchesTool = toolFilter === 'ALL' ||
                 (movement.toolId && movement.toolId.toString() === toolFilter);
 
-            return matchesSearch && matchesType && matchesTool;
+            // Filtrado por fechas - CORREGIDO para manejar correctamente zonas horarias
+            let matchesDate = true;
+            if (dateStart || dateEnd) {
+                const movementDate = new Date(movement.createdAt);
+
+                if (dateStart) {
+                    // Crear fecha de inicio en la zona horaria local
+                    const [year, month, day] = dateStart.split('-');
+                    const startDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 0, 0, 0, 0);
+                    matchesDate = matchesDate && movementDate >= startDate;
+                }
+
+                if (dateEnd) {
+                    // Crear fecha de fin en la zona horaria local
+                    const [year, month, day] = dateEnd.split('-');
+                    const endDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), 23, 59, 59, 999);
+                    matchesDate = matchesDate && movementDate <= endDate;
+                }
+            }
+
+            return matchesSearch && matchesType && matchesTool && matchesDate;
         });
+
+        console.log('Filtered movements:', filtered.length);
+        console.log('=== END FILTER DEBUG ===');
+
+        return filtered;
     }, [movements]);
 
     // Get movement statistics

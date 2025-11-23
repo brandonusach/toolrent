@@ -115,7 +115,7 @@ export const useLoans = () => {
 
                 const overdueLoansFiltered = allLoans.filter(loan => {
                     const isActive = loan.status === 'ACTIVE' || loan.status === 'active';
-                    const isOverdue = loan.agreedReturnDate < today;
+                    const isOverdue = loan.agreedReturnDate <= today;
                     return isActive && isOverdue;
                 });
 
@@ -173,8 +173,8 @@ export const useLoans = () => {
             if (isNaN(returnDate.getTime())) {
                 throw new Error('Fecha de devolución no es válida');
             }
-            if (returnDate <= today) {
-                throw new Error('La fecha de devolución debe ser posterior a hoy');
+            if (returnDate < today) {
+                throw new Error('La fecha de devolución no puede ser anterior a hoy');
             }
 
             // Preparar datos limpios para envío
@@ -254,16 +254,16 @@ export const useLoans = () => {
         }
     }, [loans]);
 
-    // Return tool - VERSIÓN MEJORADA
+    // Return tool - VERSIÓN MEJORADA CON TIPO DE DAÑO
     const returnLoan = useCallback(async (loanId, returnData) => {
         setLoading(true);
         setError(null);
         try {
-            const { damaged = false, notes = '' } = returnData;
-            console.log('Returning loan:', loanId, { damaged, notes });
+            const { damaged = false, damageType = 'MINOR', notes = '' } = returnData;
+            console.log('Returning loan:', loanId, { damaged, damageType, notes });
 
             const response = await httpClient.put(`/api/v1/loans/${loanId}/return`, null, {
-                params: { damaged, notes }
+                params: { damaged, damageType, notes }
             });
 
             const returnedLoan = response.data;

@@ -423,10 +423,38 @@ public class ClientService {
      */
     private boolean existsByEmail(String email) {
         try {
-            List<ClientEntity> clients = clientRepository.findAll();
-            return clients.stream().anyMatch(c -> c.getEmail().equalsIgnoreCase(email));
+            return clientRepository.existsByEmail(email);
         } catch (Exception e) {
             return false;
         }
+    }
+
+    /**
+     * Parsea mensajes de error para identificar el campo afectado
+     * Formato esperado: "FIELD:mensaje" o mensaje genérico
+     */
+    public java.util.Map<String, String> parseFieldErrors(String errorMessage) {
+        java.util.Map<String, String> fieldErrors = new java.util.HashMap<>();
+
+        if (errorMessage == null || errorMessage.trim().isEmpty()) {
+            fieldErrors.put("general", "Error desconocido");
+            return fieldErrors;
+        }
+
+        // Buscar patrones específicos en el mensaje
+        if (errorMessage.contains("nombre")) {
+            fieldErrors.put("name", errorMessage);
+        } else if (errorMessage.contains("RUT")) {
+            fieldErrors.put("rut", errorMessage);
+        } else if (errorMessage.contains("teléfono") || errorMessage.contains("telefono")) {
+            fieldErrors.put("phone", errorMessage);
+        } else if (errorMessage.contains("email") || errorMessage.contains("correo")) {
+            fieldErrors.put("email", errorMessage);
+        } else {
+            // Error general si no se puede identificar el campo
+            fieldErrors.put("general", errorMessage);
+        }
+
+        return fieldErrors;
     }
 }

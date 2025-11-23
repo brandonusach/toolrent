@@ -83,9 +83,6 @@ const InventoryManagement = () => {
         closeAllModals();
     };
 
-    const handleInstanceUpdate = () => {
-        loadTools(); // Refresh data from backend
-    };
 
     // Get filtered tools for display
     const filteredTools = filterTools(searchTerm, categoryFilter);
@@ -143,7 +140,6 @@ const InventoryManagement = () => {
                 setCategoryFilter={setCategoryFilter}
                 onViewInstances={handleViewInstances}
                 onEditTool={handleEditTool}
-                onDeleteTool={deleteTool}
                 onAddStock={(tool) => handleStockAction(tool, 'add-stock')}
                 onDecommission={(tool) => handleStockAction(tool, 'decommission')}
                 onAddNew={() => setShowAddModal(true)}
@@ -155,6 +151,7 @@ const InventoryManagement = () => {
                 <ToolForm
                     mode="create"
                     categories={categories}
+                    existingTools={tools}
                     onSubmit={handleCreateTool}
                     onClose={() => setShowAddModal(false)}
                 />
@@ -166,6 +163,7 @@ const InventoryManagement = () => {
                     mode="edit"
                     tool={selectedTool}
                     categories={categories}
+                    existingTools={tools}
                     onSubmit={handleUpdateTool}
                     onClose={() => setShowEditModal(false)}
                 />
@@ -176,7 +174,6 @@ const InventoryManagement = () => {
                 <InstanceManager
                     tool={selectedTool}
                     onClose={() => setShowInstanceModal(false)}
-                    onInstanceUpdate={handleInstanceUpdate}
                 />
             )}
 

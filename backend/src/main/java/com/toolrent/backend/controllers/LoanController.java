@@ -101,14 +101,20 @@ public class LoanController {
                 throw new RuntimeException("Los valores deben ser mayores a 0");
             }
 
-            String returnDate = request.get("agreedReturnDate").toString();
+            String returnDateStr = request.get("agreedReturnDate").toString();
             String notes = request.get("notes") != null ? request.get("notes").toString() : "";
 
-            // Validar fecha
+            // Parsear fecha de forma robusta manejando formatos con o sin tiempo
+            java.time.LocalDate returnDate;
             try {
-                java.time.LocalDate.parse(returnDate);
+                // Si la fecha viene con tiempo (formato ISO con T), extraer solo la fecha
+                if (returnDateStr.contains("T")) {
+                    returnDate = java.time.LocalDate.parse(returnDateStr.substring(0, 10));
+                } else {
+                    returnDate = java.time.LocalDate.parse(returnDateStr);
+                }
             } catch (Exception e) {
-                throw new RuntimeException("Formato de fecha inválido: " + returnDate);
+                throw new RuntimeException("Formato de fecha inválido: " + returnDateStr);
             }
 
             // Obtener entidades
@@ -138,7 +144,7 @@ public class LoanController {
             loan.setClient(client);
             loan.setTool(tool);
             loan.setQuantity(quantity);
-            loan.setAgreedReturnDate(java.time.LocalDate.parse(returnDate));
+            loan.setAgreedReturnDate(returnDate);
             loan.setNotes(notes.trim());
 
             LoanEntity createdLoan = loanService.createLoan(loan);
@@ -177,8 +183,9 @@ public class LoanController {
     @PutMapping("/{id}/return")
     public ResponseEntity<LoanEntity> returnTool(@PathVariable Long id,
                                                  @RequestParam(required = false, defaultValue = "false") Boolean damaged,
+                                                 @RequestParam(required = false, defaultValue = "MINOR") String damageType,
                                                  @RequestParam(required = false, defaultValue = "") String notes) {
-        LoanEntity returnedLoan = loanService.returnTool(id, damaged, notes);
+        LoanEntity returnedLoan = loanService.returnTool(id, damaged, damageType, notes);
         return ResponseEntity.ok(returnedLoan);
     }
 
@@ -288,6 +295,52 @@ public class LoanController {
     public ResponseEntity<Map<String, Object>> getLoanSummary() {
         Map<String, Object> summary = loanService.getLoanSummary();
         return ResponseEntity.ok(summary);
+    }
+
+    // ============================================================================
+    // ENDPOINTS PARA MULTAS AUTOMÁTICAS POR PRÉSTAMOS ATRASADOS
+    // ============================================================================
+
+    /**
+     * Genera o actualiza multas para todos los préstamos atrasados
+     * Útil para ejecutar manualmente la generación de multas
+     */
+    @PostMapping("/generate-overdue-fines")
+    public ResponseEntity<Map<String, Object>> generateOverdueFines() {
+        try {
+            Map<String, Object> result = loanService.generateOverdueFinesForAllLoans();
+            return ResponseEntity.ok(result);
+        } catch (Exception e) {
+            System.err.println("Error generating overdue fines: " + e.getMessage());
+            e.printStackTrace();
+            
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("success", false);
+            errorResponse.put("error", e.getMessage());
+            errorResponse.put("timestamp", java.time.LocalDateTime.now());
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
+    }
+
+    /**
+     * Obtiene estadísticas sobre multas por préstamos atrasados
+     */
+    @GetMapping("/overdue-fines-statistics")
+    public ResponseEntity<Map<String, Object>> getOverdueFinesStatistics() {
+        try {
+            Map<String, Object> stats = loanService.getOverdueFinesStatistics();
+            return ResponseEntity.ok(stats);
+        } catch (Exception e) {
+            System.err.println("Error getting overdue fines statistics: " + e.getMessage());
+            e.printStackTrace();
+            
+            Map<String, Object> errorResponse = new HashMap<>();
+            errorResponse.put("error", e.getMessage());
+            errorResponse.put("timestamp", java.time.LocalDateTime.now());
+            
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        }
     }
 }
 

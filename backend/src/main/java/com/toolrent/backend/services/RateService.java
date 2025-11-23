@@ -30,10 +30,8 @@ public class RateService {
                 System.out.println("Tarifa encontrada: $" + rate.get().getDailyAmount());
                 return rate.get().getDailyAmount();
             } else {
-                System.out.println("No se encontró tarifa de arriendo, creando tarifa por defecto...");
-                // Crear tarifa por defecto de forma segura
-                createDefaultRentalRateIfNeeded();
-                // Retornar valor por defecto en lugar de recursión
+                System.out.println("No se encontró tarifa de arriendo, retornando valor por defecto");
+                // Retornar valor por defecto - NO crear aquí para evitar rollback
                 return BigDecimal.valueOf(5000.0);
             }
         } catch (Exception e) {
@@ -54,8 +52,8 @@ public class RateService {
                 System.out.println("Tarifa de multa encontrada: $" + rate.get().getDailyAmount());
                 return rate.get().getDailyAmount();
             } else {
-                System.out.println("No se encontró tarifa de multa, creando tarifa por defecto...");
-                createDefaultLateFeeRateIfNeeded();
+                System.out.println("No se encontró tarifa de multa, retornando valor por defecto");
+                // Retornar valor por defecto - NO crear aquí para evitar rollback
                 return BigDecimal.valueOf(2000.0);
             }
         } catch (Exception e) {
@@ -75,88 +73,18 @@ public class RateService {
                 System.out.println("Tarifa de reparación encontrada: " + rate.get().getDailyAmount());
                 return rate.get().getDailyAmount();
             } else {
-                System.out.println("No se encontró tarifa de reparación, creando tarifa por defecto...");
-                createDefaultRepairRateIfNeeded();
-                return BigDecimal.valueOf(0.2); // 20%
+                System.out.println("No se encontró tarifa de reparación, retornando valor por defecto");
+                // Retornar valor por defecto - NO crear aquí para evitar rollback
+                return BigDecimal.valueOf(30.0); // 30% como valor decimal
             }
         } catch (Exception e) {
             System.err.println("Error obteniendo tarifa de reparación: " + e.getMessage());
             e.printStackTrace();
-            return BigDecimal.valueOf(0.2);
+            return BigDecimal.valueOf(30.0);
         }
     }
 
-    // MÉTODOS PARA CREAR TARIFAS POR DEFECTO - VERSIÓN SEGURA SIN RECURSIÓN
 
-    @Transactional
-    private void createDefaultRentalRateIfNeeded() {
-        try {
-            // Verificar si ya existe una tarifa activa
-            boolean exists = rateRepository.existsByTypeAndActiveTrue(RateEntity.RateType.RENTAL_RATE);
-            if (exists) {
-                System.out.println("Ya existe una tarifa de arriendo activa");
-                return;
-            }
-
-            RateEntity rate = new RateEntity();
-            rate.setType(RateEntity.RateType.RENTAL_RATE);
-            rate.setDailyAmount(BigDecimal.valueOf(5000.0));
-            rate.setEffectiveFrom(LocalDate.now());
-            rate.setActive(true);
-            rate.setCreatedBy("system");
-
-            rateRepository.save(rate);
-            System.out.println("Tarifa de arriendo por defecto creada: $5000");
-        } catch (Exception e) {
-            System.err.println("Error creando tarifa de arriendo por defecto: " + e.getMessage());
-        }
-    }
-
-    @Transactional
-    private void createDefaultLateFeeRateIfNeeded() {
-        try {
-            boolean exists = rateRepository.existsByTypeAndActiveTrue(RateEntity.RateType.LATE_FEE_RATE);
-            if (exists) {
-                System.out.println("Ya existe una tarifa de multa activa");
-                return;
-            }
-
-            RateEntity rate = new RateEntity();
-            rate.setType(RateEntity.RateType.LATE_FEE_RATE);
-            rate.setDailyAmount(BigDecimal.valueOf(2000.0));
-            rate.setEffectiveFrom(LocalDate.now());
-            rate.setActive(true);
-            rate.setCreatedBy("system");
-
-            rateRepository.save(rate);
-            System.out.println("Tarifa de multa por defecto creada: $2000");
-        } catch (Exception e) {
-            System.err.println("Error creando tarifa de multa por defecto: " + e.getMessage());
-        }
-    }
-
-    @Transactional
-    private void createDefaultRepairRateIfNeeded() {
-        try {
-            boolean exists = rateRepository.existsByTypeAndActiveTrue(RateEntity.RateType.REPAIR_RATE);
-            if (exists) {
-                System.out.println("Ya existe una tarifa de reparación activa");
-                return;
-            }
-
-            RateEntity rate = new RateEntity();
-            rate.setType(RateEntity.RateType.REPAIR_RATE);
-            rate.setDailyAmount(BigDecimal.valueOf(0.2)); // 20%
-            rate.setEffectiveFrom(LocalDate.now());
-            rate.setActive(true);
-            rate.setCreatedBy("system");
-
-            rateRepository.save(rate);
-            System.out.println("Tarifa de reparación por defecto creada: 20%");
-        } catch (Exception e) {
-            System.err.println("Error creando tarifa de reparación por defecto: " + e.getMessage());
-        }
-    }
 
     // MÉTODOS CRUD BÁSICOS
 
@@ -251,6 +179,8 @@ public class RateService {
     public BigDecimal calculateRepairCost(BigDecimal replacementValue) {
         try {
             BigDecimal repairRate = getCurrentRepairRate();
+            // repairRate ya viene como porcentaje (ej: 30.0 para 30%)
+            // Dividir entre 100 para convertir a decimal
             return replacementValue.multiply(repairRate.divide(new BigDecimal("100")));
         } catch (Exception e) {
             System.err.println("Error calculando costo de reparación: " + e.getMessage());

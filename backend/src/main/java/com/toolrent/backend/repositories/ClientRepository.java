@@ -13,6 +13,9 @@ public interface ClientRepository extends JpaRepository<ClientEntity, Long> {
 
     // To verify the existence
     boolean existsByRut(String rut);
+    boolean existsByPhone(String phone);
+    boolean existsByEmail(String email);
+
     public ClientEntity findByRut(String rut);
     // Find Clients by name
     List<ClientEntity> findByNameContainingIgnoreCase(String name);

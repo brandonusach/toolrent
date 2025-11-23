@@ -1,4 +1,3 @@
-// loans/components/FineCalculator.jsx - Calculadora de multas
 import React, { useState, useEffect } from 'react';
 import {
     X,
@@ -15,6 +14,8 @@ import {
     CreditCard
 } from 'lucide-react';
 import { useFines } from '../hooks/useFines';
+import { useRates } from '../../rates/hooks/useRates';
+import { formatDateLocal, daysBetween } from '../../../../utils/dateUtils';
 
 const FineCalculator = ({ loan, onClose }) => {
     const {
@@ -23,6 +24,11 @@ const FineCalculator = ({ loan, onClose }) => {
         payFine,
         loading
     } = useFines();
+
+    const {
+        rates,
+        getCurrentRates
+    } = useRates();
 
     const [clientFines, setClientFines] = useState([]);
     const [loanFines, setLoanFines] = useState([]);
@@ -34,6 +40,7 @@ const FineCalculator = ({ loan, onClose }) => {
     useEffect(() => {
         if (loan) {
             loadFinesData();
+            getCurrentRates(); // Cargar tarifas actuales
         }
     }, [loan]);
 
@@ -76,8 +83,8 @@ const FineCalculator = ({ loan, onClose }) => {
     const calculateEstimatedFines = () => {
         if (!loan) return { lateFine: 0, damageFine: 0, total: 0 };
 
-        const today = new Date();
-        const returnDate = new Date(loan.agreedReturnDate);
+        const today = new Date().toISOString().split('T')[0];
+        const returnDate = loan.agreedReturnDate;
 
         let estimations = {
             lateFine: 0,
@@ -86,27 +93,21 @@ const FineCalculator = ({ loan, onClose }) => {
         };
 
         // Solo calcular si está atrasado
-        if (today > returnDate && loan.status === 'ACTIVE') {
-            const daysLate = Math.ceil((today - returnDate) / (1000 * 60 * 60 * 24));
-            const dailyLateFee = (loan.dailyRate || 0) * 0.1; // 10% de la tarifa diaria
+        const daysLate = daysBetween(returnDate, today);
+        if (daysLate > 0 && loan.status === 'ACTIVE') {
+            // Usar la tarifa real de multas del sistema
+            const dailyLateFee = rates.current?.LATE_FEE_RATE || 2000;
             estimations.lateFine = daysLate * dailyLateFee;
         }
 
-        // Estimación de multa por daño (ejemplo: 20% del valor de reposición)
+        // Estimación de multa por daño usando tarifa de reparación
         if (loan.tool?.replacementValue) {
-            estimations.damageFine = loan.tool.replacementValue * 0.2;
+            const repairRate = rates.current?.REPAIR_RATE || 30;
+            estimations.damageFine = loan.tool.replacementValue * (repairRate / 100);
         }
 
         estimations.total = estimations.lateFine + estimations.damageFine;
         return estimations;
-    };
-
-    const formatDate = (dateString) => {
-        return new Date(dateString).toLocaleDateString('es-ES', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric'
-        });
     };
 
     const getFineTypeLabel = (type) => {
@@ -176,7 +177,7 @@ const FineCalculator = ({ loan, onClose }) => {
                                     <Calendar className="h-4 w-4 mr-1" />
                                     Fecha acordada:
                                 </span>
-                                <p className="text-white font-medium">{formatDate(loan.agreedReturnDate)}</p>
+                                <p className="text-white font-medium">{formatDateLocal(loan.agreedReturnDate)}</p>
                             </div>
                         </div>
                     </div>
@@ -288,11 +289,11 @@ const FineCalculator = ({ loan, onClose }) => {
                                                 </p>
                                                 <p className="text-gray-300 text-sm">{fine.description}</p>
                                                 <div className="text-xs text-gray-400 mt-2">
-                                                    <div>Creada: {formatDate(fine.createdAt)}</div>
-                                                    <div>Vence: {formatDate(fine.dueDate)}</div>
+                                                    <div>Creada: {formatDateLocal(fine.createdAt)}</div>
+                                                    <div>Vence: {formatDateLocal(fine.dueDate)}</div>
                                                     {fine.paid && fine.paidDate && (
                                                         <div className="text-green-400">
-                                                            Pagada: {formatDate(fine.paidDate)}
+                                                            Pagada: {formatDateLocal(fine.paidDate)}
                                                         </div>
                                                     )}
                                                 </div>
@@ -364,8 +365,8 @@ const FineCalculator = ({ loan, onClose }) => {
                                                     </p>
                                                     <p className="text-gray-300 text-sm">{fine.description}</p>
                                                     <div className="text-xs text-gray-400 mt-1">
-                                                        {formatDate(fine.createdAt)} • Vence: {formatDate(fine.dueDate)}
-                                                        {fine.paid && ` • Pagada: ${formatDate(fine.paidDate)}`}
+                                                        {formatDateLocal(fine.createdAt)} • Vence: {formatDateLocal(fine.dueDate)}
+                                                        {fine.paid && ` • Pagada: ${formatDateLocal(fine.paidDate)}`}
                                                     </div>
                                                 </div>
                                                 {!fine.paid && (

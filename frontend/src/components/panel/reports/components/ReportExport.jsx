@@ -1,6 +1,7 @@
 // ReportExport.jsx - Exportar reportes (frontend puro)
 import React, { useState } from 'react';
 import { useReports } from '../hooks/useReports';
+import { getTodayDate } from '../../../../utils/dateUtils';
 
 const ReportExport = ({ reportData, activeTab }) => {
     const [isExporting, setIsExporting] = useState(false);
@@ -74,7 +75,7 @@ const ReportExport = ({ reportData, activeTab }) => {
         const blob = new Blob([jsonContent], { type: 'application/json;charset=utf-8;' });
         const link = document.createElement('a');
         link.href = URL.createObjectURL(blob);
-        link.download = `${exportData.filename}_${new Date().toISOString().split('T')[0]}.json`;
+        link.download = `${exportData.filename}_${getTodayDate()}.json`;
         link.click();
         URL.revokeObjectURL(link.href);
     };

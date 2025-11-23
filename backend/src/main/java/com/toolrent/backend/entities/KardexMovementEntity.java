@@ -25,6 +25,11 @@ public class KardexMovementEntity {
     @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
     private ToolEntity tool;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "tool_instance_id")
+    @JsonIgnoreProperties({"hibernateLazyInitializer", "handler"})
+    private ToolInstanceEntity toolInstance;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private MovementType type;
@@ -91,10 +96,11 @@ public class KardexMovementEntity {
         return calculateStockChange() < 0;
     }
 
-    // Constructor for creating movements
-    public KardexMovementEntity(ToolEntity tool, MovementType type, Integer quantity,
+    // Constructor for creating movements with tool instance
+    public KardexMovementEntity(ToolEntity tool, ToolInstanceEntity toolInstance, MovementType type, Integer quantity,
                                 Integer stockBefore, Integer stockAfter, String description, LoanEntity relatedLoan) {
         this.tool = tool;
+        this.toolInstance = toolInstance;
         this.type = type;
         this.quantity = quantity;
         this.stockBefore = stockBefore;
@@ -104,9 +110,15 @@ public class KardexMovementEntity {
         this.createdAt = LocalDateTime.now();
     }
 
+    // Constructor for creating movements
+    public KardexMovementEntity(ToolEntity tool, MovementType type, Integer quantity,
+                                Integer stockBefore, Integer stockAfter, String description, LoanEntity relatedLoan) {
+        this(tool, null, type, quantity, stockBefore, stockAfter, description, relatedLoan);
+    }
+
     // Constructor without loan relation
     public KardexMovementEntity(ToolEntity tool, MovementType type, Integer quantity,
                                 Integer stockBefore, Integer stockAfter, String description) {
-        this(tool, type, quantity, stockBefore, stockAfter, description, null);
+        this(tool, null, type, quantity, stockBefore, stockAfter, description, null);
     }
 }

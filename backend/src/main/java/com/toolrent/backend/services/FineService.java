@@ -4,7 +4,10 @@ package com.toolrent.backend.services;
 import com.toolrent.backend.entities.FineEntity;
 import com.toolrent.backend.entities.ClientEntity;
 import com.toolrent.backend.entities.LoanEntity;
+import com.toolrent.backend.entities.ToolEntity;
+import com.toolrent.backend.entities.ToolInstanceEntity;
 import com.toolrent.backend.repositories.FineRepository;
+import com.toolrent.backend.repositories.ClientRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,7 +27,16 @@ public class FineService {
     private FineRepository fineRepository;
 
     @Autowired
+    private ClientRepository clientRepository;
+
+    @Autowired
     private ClientService clientService;
+
+    @Autowired(required = false)
+    private ToolService toolService;
+
+    @Autowired(required = false)
+    private ToolInstanceService toolInstanceService;
 
     // Verificar si el cliente tiene multas impagas - VERSIÓN SEGURA
     public boolean clientHasUnpaidFines(ClientEntity client) {
@@ -180,7 +192,41 @@ public class FineService {
             }
 
             fine.markAsPaid();
-            return fineRepository.save(fine);
+            FineEntity paidFine = fineRepository.save(fine);
+
+            // 🔧 ACTUALIZACIÓN DEL ESTADO DE LA HERRAMIENTA SEGÚN TIPO DE DAÑO
+            if (paidFine.getDamageType() != null && paidFine.getLoan() != null && paidFine.getLoan().getTool() != null) {
+                try {
+                    handleToolStatusAfterFinePayment(paidFine);
+                } catch (Exception e) {
+                    System.err.println("Error updating tool status after fine payment: " + e.getMessage());
+                    // No fallar el pago de multa por esto
+                }
+            }
+
+            // 🔧 ACTUALIZACIÓN DEL ESTADO DEL CLIENTE
+            if (paidFine.getClient() != null) {
+                try {
+                    ClientEntity client = paidFine.getClient();
+
+                    // Verificar si aún tiene otras multas impagas
+                    List<FineEntity> unpaidFines = getUnpaidFinesByClient(client);
+
+                    // Si no tiene más multas impagas, cambiar estado a ACTIVE
+                    if (unpaidFines.isEmpty() && client.getStatus() == ClientEntity.ClientStatus.RESTRICTED) {
+                        client.setStatus(ClientEntity.ClientStatus.ACTIVE);
+                        clientRepository.save(client);
+                        System.out.println("Client " + client.getName() + " status changed to ACTIVE - all fines paid");
+                    } else if (!unpaidFines.isEmpty()) {
+                        System.out.println("Client " + client.getName() + " still has " + unpaidFines.size() + " unpaid fine(s)");
+                    }
+                } catch (Exception e) {
+                    System.err.println("Error updating client status after fine payment: " + e.getMessage());
+                    // No fallar el pago de multa por esto
+                }
+            }
+
+            return paidFine;
         } catch (Exception e) {
             System.err.println("Error paying fine: " + e.getMessage());
             throw new RuntimeException("Error al pagar la multa: " + e.getMessage());
@@ -208,7 +254,24 @@ public class FineService {
             if (fine.getCreatedAt() == null) {
                 fine.setCreatedAt(LocalDateTime.now());
             }
-            return fineRepository.save(fine);
+            FineEntity savedFine = fineRepository.save(fine);
+
+            // 🔧 NUEVO: Actualizar estado del cliente a RESTRICTED si tiene multas impagas
+            if (savedFine.getClient() != null && !savedFine.getPaid()) {
+                try {
+                    ClientEntity client = savedFine.getClient();
+                    if (client.getStatus() != ClientEntity.ClientStatus.RESTRICTED) {
+                        client.setStatus(ClientEntity.ClientStatus.RESTRICTED);
+                        clientRepository.save(client);
+                        System.out.println("Client " + client.getName() + " status changed to RESTRICTED due to unpaid fine");
+                    }
+                } catch (Exception e) {
+                    System.err.println("Error updating client status after fine creation: " + e.getMessage());
+                    // No fallar la creación de multa por esto
+                }
+            }
+
+            return savedFine;
         } catch (Exception e) {
             System.err.println("Error creating fine: " + e.getMessage());
             throw new RuntimeException("Error al crear la multa: " + e.getMessage());
@@ -359,6 +422,80 @@ public class FineService {
         }
     }
 
+    // NUEVO: Manejar estado de herramienta después del pago de multa por daño
+    private void handleToolStatusAfterFinePayment(FineEntity fine) {
+        if (fine.getDamageType() == null || fine.getLoan() == null) {
+            return;
+        }
+
+        ToolEntity tool = fine.getLoan().getTool();
+        Integer quantity = fine.getLoan().getQuantity();
+
+        System.out.println("Processing tool status after fine payment - Tool: " + tool.getName() +
+                         ", Damage Type: " + fine.getDamageType());
+
+        if (fine.getDamageType() == FineEntity.DamageType.MINOR) {
+            // Daño leve: NO HACER NADA AUTOMÁTICAMENTE
+            // El administrador debe marcar manualmente la herramienta como reparada desde el inventario
+            // El pago de la multa NO cambia el estado de la herramienta
+            System.out.println("Minor damage fine paid - Tool instances remain in their current state");
+            System.out.println("Administrator must manually mark tool instances as repaired from inventory");
+
+            // NO restaurar stock automáticamente
+            // NO cambiar estado de instancias automáticamente
+            // La herramienta puede estar ya reparada (AVAILABLE) o aún en reparación (UNDER_REPAIR)
+            // dependiendo de si el admin ya la marcó como reparada
+
+
+        } else if (fine.getDamageType() == FineEntity.DamageType.IRREPARABLE) {
+            // Daño irreparable: Dar de baja (NO restaurar stock)
+            System.out.println("Irreparable damage - decommissioning tool");
+
+            // NO restaurar stock - la herramienta se pierde
+
+            // Actualizar instancias individuales a DECOMMISSIONED
+            if (toolInstanceService != null) {
+                try {
+                    List<ToolInstanceEntity> decommissionedInstances =
+                        toolInstanceService.decommissionInstances(tool.getId(), quantity);
+                    System.out.println("Successfully decommissioned " + decommissionedInstances.size() + " instances");
+                } catch (Exception e) {
+                    System.err.println("Error decommissioning tool instances: " + e.getMessage());
+                }
+            }
+
+            // Verificar si todas las instancias están dadas de baja
+            if (toolInstanceService != null) {
+                try {
+                    Long availableCount = toolInstanceService.getAvailableCount(tool.getId());
+                    Long loanedCount = toolInstanceService.getInstancesByStatus(
+                        ToolInstanceEntity.ToolInstanceStatus.LOANED).stream()
+                        .filter(i -> i.getTool().getId().equals(tool.getId()))
+                        .count();
+
+                    if (availableCount == 0 && loanedCount == 0) {
+                        // Todas las instancias están dadas de baja o en reparación
+                        tool.setStatus(ToolEntity.ToolStatus.DECOMMISSIONED);
+                        System.out.println("All instances decommissioned - tool marked as DECOMMISSIONED");
+                    }
+                } catch (Exception e) {
+                    System.err.println("Error checking tool instance status: " + e.getMessage());
+                }
+            }
+        }
+
+        // Guardar cambios en la herramienta
+        if (toolService != null) {
+            try {
+                toolService.updateTool(tool.getId(), tool);
+                System.out.println("Tool status updated successfully: " + tool.getStatus() +
+                                 " (Stock: " + tool.getCurrentStock() + "/" + tool.getInitialStock() + ")");
+            } catch (Exception e) {
+                System.err.println("Error saving tool changes: " + e.getMessage());
+            }
+        }
+    }
+
     // Crear multa por atraso - método auxiliar para el LoanService
     public FineEntity createLateFine(LoanEntity loan, long daysLate, BigDecimal lateFeeRate) {
         try {
@@ -403,6 +540,53 @@ public class FineService {
             return createFine(fine);
         } catch (Exception e) {
             System.err.println("Error creating damage fine: " + e.getMessage());
+            throw new RuntimeException("Error al crear multa por daño: " + e.getMessage());
+        }
+    }
+
+    // Crear multa por daño con tipo de daño especificado - NUEVO MÉTODO
+    public FineEntity createDamageFineWithType(LoanEntity loan, FineEntity.DamageType damageType, String description) {
+        try {
+            if (loan == null || damageType == null) {
+                throw new RuntimeException("Parámetros inválidos para crear multa por daño");
+            }
+
+            ToolEntity tool = loan.getTool();
+            if (tool == null || tool.getReplacementValue() == null) {
+                throw new RuntimeException("Herramienta o valor de reposición no encontrado");
+            }
+
+            BigDecimal fineAmount;
+            FineEntity.FineType fineType;
+            String fineDescription;
+
+            if (damageType == FineEntity.DamageType.MINOR) {
+                // Daño leve: 20% del valor de reposición
+                fineAmount = tool.getReplacementValue().multiply(BigDecimal.valueOf(0.2));
+                fineType = FineEntity.FineType.DAMAGE_REPAIR;
+                fineDescription = "Multa por reparación (daño leve) - " + (description != null ? description : "");
+            } else {
+                // Daño irreparable: valor completo de reposición
+                fineAmount = tool.getReplacementValue();
+                fineType = FineEntity.FineType.TOOL_REPLACEMENT;
+                fineDescription = "Multa por reposición (daño irreparable) - " + (description != null ? description : "");
+            }
+
+            FineEntity fine = new FineEntity();
+            fine.setClient(loan.getClient());
+            fine.setLoan(loan);
+            fine.setType(fineType);
+            fine.setDamageType(damageType);
+            fine.setAmount(fineAmount);
+            fine.setDescription(fineDescription.trim());
+            fine.setDueDate(LocalDate.now().plusDays(30)); // 30 días para pagar
+            fine.setPaid(false);
+
+            System.out.println("Creating " + damageType + " damage fine: " + fineType + " - Amount: $" + fineAmount);
+
+            return createFine(fine);
+        } catch (Exception e) {
+            System.err.println("Error creating damage fine with type: " + e.getMessage());
             throw new RuntimeException("Error al crear multa por daño: " + e.getMessage());
         }
     }

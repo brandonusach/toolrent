@@ -1,15 +1,29 @@
 import React from 'react';
-import { Eye, ArrowUp, ArrowDown, RotateCcw, Minus, Plus, Wrench } from 'lucide-react';
+import { Eye, ArrowUp, ArrowDown, RotateCcw, Minus, Plus, Wrench, AlertTriangle } from 'lucide-react';
+import { formatDateTime } from '../../../../utils/dateUtils';
 
 const MovementsList = ({ movements, onViewDetail }) => {
-    const formatDateTime = (dateTime) => {
-        return new Date(dateTime).toLocaleString('es-CL', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
+
+    const getToolStatusBadge = (status) => {
+        const badges = {
+            AVAILABLE: 'bg-green-500/10 text-green-400 border-green-500/30',
+            LOANED: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
+            IN_REPAIR: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
+            DECOMMISSIONED: 'bg-gray-500/10 text-gray-400 border-gray-500/30',
+            PARTIALLY_AVAILABLE: 'bg-orange-500/10 text-orange-400 border-orange-500/30'
+        };
+        return badges[status] || 'bg-slate-500/10 text-slate-400 border-slate-500/30';
+    };
+
+    const getToolStatusLabel = (status) => {
+        const labels = {
+            AVAILABLE: 'Disponible',
+            LOANED: 'Prestada',
+            IN_REPAIR: 'En Reparación',
+            DECOMMISSIONED: 'Dada de Baja',
+            PARTIALLY_AVAILABLE: 'Parcialmente Disponible'
+        };
+        return labels[status] || status;
     };
 
     const getMovementIcon = (type) => {
@@ -113,7 +127,7 @@ const MovementsList = ({ movements, onViewDetail }) => {
 
                                 {/* Movement details */}
                                 <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-3 mb-2">
+                                    <div className="flex items-center gap-3 mb-2 flex-wrap">
                                         <h4 className="font-medium text-slate-100">
                                             {movement.toolName || 'Herramienta desconocida'}
                                         </h4>
@@ -156,10 +170,40 @@ const MovementsList = ({ movements, onViewDetail }) => {
                                     {/* Description */}
                                     {movement.description && (
                                         <div className="mt-3">
-                                            <p className="text-slate-400 text-sm mb-1">Descripción</p>
-                                            <p className="text-slate-300 text-sm">
+                                            <p className="text-slate-400 text-sm mb-1">
+                                                {movement.type === 'DECOMMISSION' ? 'Razón de la Baja' :
+                                                 movement.type === 'REPAIR' ? 'Detalle de Reparación' : 'Descripción'}
+                                            </p>
+                                            <p className={`text-sm ${
+                                                movement.type === 'DECOMMISSION' ? 'text-red-300 font-medium' : 
+                                                movement.type === 'REPAIR' ? 'text-yellow-300 font-medium' : 
+                                                'text-slate-300'
+                                            }`}>
                                                 {movement.description}
                                             </p>
+                                            {movement.type === 'DECOMMISSION' && (
+                                                <div className="mt-2 flex items-start gap-2 p-2 bg-red-500/10 border border-red-500/20 rounded">
+                                                    <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                                                    <div className="text-xs text-red-400">
+                                                        <p className="font-medium">Herramienta dada de baja permanentemente</p>
+                                                        <p className="mt-1 text-red-300">
+                                                            Stock NO se incrementa.
+                                                            {movement.instanceStatus === 'DECOMMISSIONED' && ' Instancias marcadas como inoperativas.'}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            )}
+                                            {movement.type === 'REPAIR' && (
+                                                <div className="mt-2 flex items-start gap-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded">
+                                                    <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
+                                                    <div className="text-xs text-yellow-400">
+                                                        <p className="font-medium">Herramienta en reparación</p>
+                                                        <p className="mt-1 text-yellow-300">
+                                                            No disponible temporalmente. Stock se restaurará al completar la reparación.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
 

@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
-import { Search, Plus, Users, UserCheck, UserX } from 'lucide-react';
+import { Plus, Users, UserCheck, UserX } from 'lucide-react';
 
 // --- ESTOS COMPONENTES, HOOKS Y UTILS NO SE MODIFICAN ---
 import ClientList from './components/ClientList';
 import ClientForm from './components/ClientForm';
 import ClientDetail from './components/ClientDetail';
-import ClientStatus from './components/ClientStatus';
 import ClientSearch from './components/ClientSearch';
 import { useClients } from './hooks/useClients';
 import { CLIENT_STATUS, PERMISSIONS, hasPermission } from './utils/clientConstants';
@@ -18,9 +17,8 @@ const ClientManagement = () => {
     const [showAddModal, setShowAddModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showDetailModal, setShowDetailModal] = useState(false);
-    const [showStatusModal, setShowStatusModal] = useState(false);
     const [searchCriteria, setSearchCriteria] = useState({ general: '', status: 'ALL' });
-    const { clients, loading, error, loadClients, createClient, updateClient, deleteClient, updateClientStatus, clearError } = useClients();
+    const { clients, loading, error, loadClients, createClient, updateClient, deleteClient, clearError } = useClients();
 
     useEffect(() => {
         loadClients();
@@ -29,20 +27,17 @@ const ClientManagement = () => {
     const handleViewClient = (client) => { setSelectedClient(client); setShowDetailModal(true); };
     const handleEditClient = (client) => { if (hasPermission(isAdmin ? 'admin' : 'user', PERMISSIONS.CLIENT.UPDATE)) { setSelectedClient(client); setShowEditModal(true); } else { alert('No tiene permisos'); } };
     const handleAddClient = () => { if (hasPermission(isAdmin ? 'admin' : 'user', PERMISSIONS.CLIENT.CREATE)) { setShowAddModal(true); } else { alert('No tiene permisos'); } };
-    const handleChangeStatus = (client) => { if (hasPermission(isAdmin ? 'admin' : 'user', PERMISSIONS.CLIENT.CHANGE_STATUS)) { setSelectedClient(client); setShowStatusModal(true); } else { alert('No tiene permisos'); } };
 
     const closeAllModals = () => {
         setSelectedClient(null);
         setShowAddModal(false);
         setShowEditModal(false);
         setShowDetailModal(false);
-        setShowStatusModal(false);
         if (clearError) clearError();
     };
 
     const handleCreateClient = async (clientData) => { await createClient(clientData); closeAllModals(); };
     const handleUpdateClient = async (clientId, clientData) => { await updateClient(clientId, clientData); closeAllModals(); };
-    const handleStatusUpdate = async (clientId, newStatus) => { await updateClientStatus(clientId, newStatus); closeAllModals(); };
     const handleDeleteClient = async (client) => { if (hasPermission(isAdmin ? 'admin' : 'user', PERMISSIONS.CLIENT.DELETE) && window.confirm('¿Seguro?')) { await deleteClient(client.id); closeAllModals(); } };
     const handleSearch = (criteria) => { setSearchCriteria(criteria); };
     const handleClearSearch = () => { setSearchCriteria({ general: '', status: 'ALL' }); };
@@ -51,7 +46,10 @@ const ClientManagement = () => {
         let filtered = [...clients];
         if (searchCriteria.general) {
             const term = searchCriteria.general.toLowerCase().trim();
-            filtered = filtered.filter(c => c.name?.toLowerCase().includes(term) || c.rut?.toLowerCase().includes(term) || c.email?.toLowerCase().includes(term));
+            filtered = filtered.filter(c =>
+                c.name?.toLowerCase().includes(term) ||
+                c.rut?.toLowerCase().includes(term)
+            );
         }
         if (searchCriteria.status && searchCriteria.status !== 'ALL') {
             filtered = filtered.filter(c => c.status === searchCriteria.status);
@@ -160,7 +158,6 @@ const ClientManagement = () => {
                         clients={filteredClients}
                         onViewClient={handleViewClient}
                         onEditClient={handleEditClient}
-                        onChangeStatus={handleChangeStatus}
                         onDeleteClient={handleDeleteClient}
                         isAdmin={isAdmin}
                     />
@@ -171,7 +168,6 @@ const ClientManagement = () => {
             {showAddModal && <ClientForm mode="create" onClose={closeAllModals} onSubmit={handleCreateClient} />}
             {showEditModal && selectedClient && <ClientForm mode="edit" client={selectedClient} onClose={closeAllModals} onSubmit={(data) => handleUpdateClient(selectedClient.id, data)} />}
             {showDetailModal && selectedClient && <ClientDetail client={selectedClient} isOpen={showDetailModal} onClose={closeAllModals} />}
-            {showStatusModal && selectedClient && <ClientStatus client={selectedClient} isOpen={showStatusModal} onClose={closeAllModals} onConfirm={handleStatusUpdate} />}
         </div>
     );
 };

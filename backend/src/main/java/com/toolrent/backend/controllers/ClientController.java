@@ -38,7 +38,11 @@ public class ClientController {
             ClientEntity newClient = clientService.saveClient(client);
             return ResponseEntity.ok(newClient);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            // Devolver errores en formato estructurado
+            java.util.Map<String, Object> errorResponse = new java.util.HashMap<>();
+            java.util.Map<String, String> fieldErrors = clientService.parseFieldErrors(e.getMessage());
+            errorResponse.put("fieldErrors", fieldErrors);
+            return ResponseEntity.badRequest().body(errorResponse);
         }
     }
 
@@ -49,7 +53,11 @@ public class ClientController {
             ClientEntity updatedClient = clientService.updateClient(client);
             return ResponseEntity.ok(updatedClient);
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(e.getMessage());
+            // Devolver errores en formato estructurado
+            java.util.Map<String, Object> errorResponse = new java.util.HashMap<>();
+            java.util.Map<String, String> fieldErrors = clientService.parseFieldErrors(e.getMessage());
+            errorResponse.put("fieldErrors", fieldErrors);
+            return ResponseEntity.badRequest().body(errorResponse);
         }
     }
 

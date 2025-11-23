@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Calendar, Save, X, AlertTriangle, CheckCircle, Calculator } from 'lucide-react';
-import { RATE_TYPES, formatCurrency, validateAmount, validateDateRange, CALCULATOR_CONFIG } from '../utils/rateConstants';
+import { Settings, Calendar, Save, X, AlertTriangle, CheckCircle } from 'lucide-react';
+import { RATE_TYPES, formatCurrency, validateDateRange } from '../utils/rateConstants';
 
 const ReplacementValues = ({
                                currentRate = 0,
@@ -8,8 +8,6 @@ const ReplacementValues = ({
                                onCreate,
                                onUpdate,
                                onDeactivate,
-                               onShowHistory,
-                               onCalculateRepairCost,
                                loading = false,
                                isAdmin = false
                            }) => {
@@ -24,12 +22,6 @@ const ReplacementValues = ({
     const [showForm, setShowForm] = useState(false);
     const [editingId, setEditingId] = useState(null);
 
-    // Calculadora de reparación
-    const [calculator, setCalculator] = useState({
-        replacementValue: '',
-        repairCost: 0,
-        calculating: false
-    });
 
     // Obtener tarifas de reparación del estado
     const repairRates = rates.all?.filter(rate => rate.type === RATE_TYPES.REPAIR_RATE) || [];
@@ -81,8 +73,12 @@ const ReplacementValues = ({
         }
 
         if (!editingId && formData.effectiveFrom) {
-            const today = new Date().toISOString().split('T')[0];
-            if (formData.effectiveFrom < today) {
+            // Obtener fecha local correcta (sin problemas de zona horaria)
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const selectedDate = new Date(formData.effectiveFrom + 'T00:00:00');
+
+            if (selectedDate < today) {
                 newErrors.effectiveFrom = 'La fecha de inicio debe ser hoy o una fecha futura';
             }
         }
@@ -138,52 +134,6 @@ const ReplacementValues = ({
         }
     };
 
-    // Calculadora de costo de reparación
-    const handleCalculateRepairCost = async () => {
-        const replacementValue = parseFloat(calculator.replacementValue);
-
-        if (!replacementValue || replacementValue <= 0) {
-            setErrors({ calculator: 'Ingrese un valor de reposición válido' });
-            return;
-        }
-
-        if (replacementValue < CALCULATOR_CONFIG.REPAIR_COST.MIN_REPLACEMENT_VALUE) {
-            setErrors({ calculator: `El valor mínimo es ${formatCurrency(CALCULATOR_CONFIG.REPAIR_COST.MIN_REPLACEMENT_VALUE)}` });
-            return;
-        }
-
-        if (replacementValue > CALCULATOR_CONFIG.REPAIR_COST.MAX_REPLACEMENT_VALUE) {
-            setErrors({ calculator: `El valor máximo es ${formatCurrency(CALCULATOR_CONFIG.REPAIR_COST.MAX_REPLACEMENT_VALUE)}` });
-            return;
-        }
-
-        setCalculator(prev => ({ ...prev, calculating: true }));
-        setErrors(prev => ({ ...prev, calculator: null }));
-
-        try {
-            const repairCost = await onCalculateRepairCost(replacementValue);
-            setCalculator(prev => ({
-                ...prev,
-                repairCost: repairCost,
-                calculating: false
-            }));
-        } catch (error) {
-            setErrors({ calculator: error.message });
-            setCalculator(prev => ({ ...prev, calculating: false }));
-        }
-    };
-
-    const handleCalculatorInputChange = (value) => {
-        setCalculator(prev => ({
-            ...prev,
-            replacementValue: value,
-            repairCost: 0
-        }));
-
-        if (errors.calculator) {
-            setErrors(prev => ({ ...prev, calculator: null }));
-        }
-    };
 
     const formatDate = (dateString) => {
         if (!dateString) return '';
@@ -206,23 +156,15 @@ const ReplacementValues = ({
                     </div>
                 </div>
 
-                <div className="flex gap-2">
+                {isAdmin && (
                     <button
-                        onClick={onShowHistory}
-                        className="px-4 py-2 text-gray-400 hover:text-white border border-gray-600 hover:border-gray-500 rounded-lg transition-colors"
+                        onClick={() => setShowForm(!showForm)}
+                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
                     >
-                        Ver Historial
+                        {showForm ? <X size={18} /> : <Settings size={18} />}
+                        {showForm ? 'Cancelar' : 'Nueva Tarifa'}
                     </button>
-                    {isAdmin && (
-                        <button
-                            onClick={() => setShowForm(!showForm)}
-                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
-                        >
-                            {showForm ? <X size={18} /> : <Settings size={18} />}
-                            {showForm ? 'Cancelar' : 'Nueva Tarifa'}
-                        </button>
-                    )}
-                </div>
+                )}
             </div>
 
             {/* Error general */}
@@ -258,70 +200,6 @@ const ReplacementValues = ({
                 </div>
             </div>
 
-            {/* Calculadora de costo de reparación */}
-            <div className="mb-6 bg-gray-750 p-6 rounded-lg border border-gray-600">
-                <h3 className="text-lg font-medium text-white mb-4 flex items-center gap-2">
-                    <Calculator size={20} />
-                    Calculadora de Costo de Reparación
-                </h3>
-
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="md:col-span-2">
-                        <label className="block text-sm font-medium text-gray-300 mb-2">
-                            Valor de Reposición
-                        </label>
-                        <div className="relative">
-                            <span className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
-                                $
-                            </span>
-                            <input
-                                type="number"
-                                value={calculator.replacementValue}
-                                onChange={(e) => handleCalculatorInputChange(e.target.value)}
-                                placeholder={CALCULATOR_CONFIG.REPAIR_COST.DEFAULT_REPLACEMENT_VALUE.toLocaleString()}
-                                min={CALCULATOR_CONFIG.REPAIR_COST.MIN_REPLACEMENT_VALUE}
-                                max={CALCULATOR_CONFIG.REPAIR_COST.MAX_REPLACEMENT_VALUE}
-                                step="1000"
-                                className={`w-full bg-gray-700 border ${
-                                    errors.calculator ? 'border-red-500' : 'border-gray-600'
-                                } rounded-lg px-4 pl-8 py-2.5 text-white placeholder-gray-400 focus:outline-none focus:border-blue-500`}
-                            />
-                        </div>
-                        {errors.calculator && (
-                            <p className="mt-1 text-sm text-red-400">{errors.calculator}</p>
-                        )}
-                    </div>
-
-                    <div className="flex flex-col justify-end">
-                        <button
-                            onClick={handleCalculateRepairCost}
-                            disabled={calculator.calculating || !currentRate}
-                            className="flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-600 text-white px-4 py-2.5 rounded-lg transition-colors"
-                        >
-                            <Calculator size={18} />
-                            {calculator.calculating ? 'Calculando...' : 'Calcular'}
-                        </button>
-                    </div>
-                </div>
-
-                {calculator.repairCost > 0 && (
-                    <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                        <div className="flex justify-between items-center">
-                            <div>
-                                <p className="text-blue-400 font-medium">Costo de Reparación Calculado:</p>
-                                <p className="text-sm text-gray-400 mt-1">
-                                    {formatCurrency(parseFloat(calculator.replacementValue))} × {currentRate}% =
-                                </p>
-                            </div>
-                            <div className="text-right">
-                                <p className="text-2xl font-bold text-blue-400">
-                                    {formatCurrency(calculator.repairCost)}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                )}
-            </div>
 
             {/* Formulario */}
             {showForm && isAdmin && (

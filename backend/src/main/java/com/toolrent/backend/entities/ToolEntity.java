@@ -33,6 +33,9 @@ public class ToolEntity {
     @Column(nullable = false)
     private BigDecimal replacementValue;
 
+    @Column(name = "rental_rate", nullable = false, precision = 10, scale = 2)
+    private BigDecimal rentalRate;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private ToolStatus status;

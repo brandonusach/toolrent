@@ -1,5 +1,6 @@
 // ReportFilters.jsx - Filtros de fecha para reportes
 import React, { useState } from 'react';
+import { getTodayDate, toInputDate } from '../../../../utils/dateUtils';
 
 const ReportFilters = ({ dateFilters, onDateChange, loading }) => {
     const [localFilters, setLocalFilters] = useState(dateFilters);
@@ -9,7 +10,7 @@ const ReportFilters = ({ dateFilters, onDateChange, loading }) => {
         {
             label: 'Hoy',
             getValue: () => {
-                const today = new Date().toISOString().split('T')[0];
+                const today = getTodayDate();
                 return { startDate: today, endDate: today };
             }
         },
@@ -17,11 +18,11 @@ const ReportFilters = ({ dateFilters, onDateChange, loading }) => {
             label: 'Esta Semana',
             getValue: () => {
                 const today = new Date();
-                const firstDay = new Date(today.setDate(today.getDate() - today.getDay()));
-                const lastDay = new Date(today.setDate(today.getDate() - today.getDay() + 6));
+                const firstDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay());
+                const lastDay = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay() + 6);
                 return {
-                    startDate: firstDay.toISOString().split('T')[0],
-                    endDate: lastDay.toISOString().split('T')[0]
+                    startDate: toInputDate(firstDay),
+                    endDate: toInputDate(lastDay)
                 };
             }
         },
@@ -32,8 +33,8 @@ const ReportFilters = ({ dateFilters, onDateChange, loading }) => {
                 const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
                 const lastDay = new Date(today.getFullYear(), today.getMonth() + 1, 0);
                 return {
-                    startDate: firstDay.toISOString().split('T')[0],
-                    endDate: lastDay.toISOString().split('T')[0]
+                    startDate: toInputDate(firstDay),
+                    endDate: toInputDate(lastDay)
                 };
             }
         },
@@ -44,8 +45,8 @@ const ReportFilters = ({ dateFilters, onDateChange, loading }) => {
                 const firstDay = new Date(today.getFullYear(), today.getMonth() - 1, 1);
                 const lastDay = new Date(today.getFullYear(), today.getMonth(), 0);
                 return {
-                    startDate: firstDay.toISOString().split('T')[0],
-                    endDate: lastDay.toISOString().split('T')[0]
+                    startDate: toInputDate(firstDay),
+                    endDate: toInputDate(lastDay)
                 };
             }
         },
@@ -53,11 +54,10 @@ const ReportFilters = ({ dateFilters, onDateChange, loading }) => {
             label: 'Últimos 30 días',
             getValue: () => {
                 const today = new Date();
-                const thirtyDaysAgo = new Date(today);
-                thirtyDaysAgo.setDate(today.getDate() - 30);
+                const thirtyDaysAgo = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 30);
                 return {
-                    startDate: thirtyDaysAgo.toISOString().split('T')[0],
-                    endDate: new Date().toISOString().split('T')[0]
+                    startDate: toInputDate(thirtyDaysAgo),
+                    endDate: getTodayDate()
                 };
             }
         }

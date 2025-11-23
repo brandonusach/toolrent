@@ -1,7 +1,86 @@
-import React from 'react';
-import { X, User, Hash, Phone, Mail, Calendar, Shield, MapPin } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { X, User, Phone, Calendar, Shield } from 'lucide-react';
+import { useLoans } from '../../loans/hooks/useLoans';
 
 const ClientDetail = ({ client, isOpen, onClose }) => {
+    const [stats, setStats] = useState({
+        activeLoans: 0,
+        completedLoans: 0,
+        overdueLoans: 0,
+        totalDaysOverdue: 0
+    });
+    const [loadingStats, setLoadingStats] = useState(true);
+
+    const { getLoansByClient } = useLoans();
+
+    useEffect(() => {
+        if (isOpen && client) {
+            loadClientStatistics();
+        }
+    }, [isOpen, client]);
+
+    const loadClientStatistics = async () => {
+        if (!client || !client.id) return;
+
+        setLoadingStats(true);
+        try {
+            const clientLoans = await getLoansByClient(client.id);
+
+            // Calcular estadísticas
+            const active = clientLoans.filter(loan =>
+                loan.status === 'ACTIVE' || loan.status === 'active'
+            ).length;
+
+            const completed = clientLoans.filter(loan =>
+                loan.status === 'RETURNED' || loan.status === 'returned'
+            ).length;
+
+            const overdue = clientLoans.filter(loan => {
+                if (loan.status !== 'ACTIVE' && loan.status !== 'active') return false;
+                const agreedDate = new Date(loan.agreedReturnDate);
+                const today = new Date();
+                return agreedDate < today;
+            }).length;
+
+            // Calcular días de retraso promedio
+            const overdueLoans = clientLoans.filter(loan => {
+                if (loan.status !== 'ACTIVE' && loan.status !== 'active') return false;
+                const agreedDate = new Date(loan.agreedReturnDate);
+                const today = new Date();
+                return agreedDate < today;
+            });
+
+            let totalDaysOverdue = 0;
+            if (overdueLoans.length > 0) {
+                overdueLoans.forEach(loan => {
+                    const agreedDate = new Date(loan.agreedReturnDate);
+                    const today = new Date();
+                    const daysOverdue = Math.floor((today - agreedDate) / (1000 * 60 * 60 * 24));
+                    totalDaysOverdue += daysOverdue;
+                });
+            }
+
+            setStats({
+                activeLoans: active,
+                completedLoans: completed,
+                overdueLoans: overdue,
+                totalDaysOverdue: overdueLoans.length > 0
+                    ? Math.round(totalDaysOverdue / overdueLoans.length)
+                    : 0
+            });
+        } catch (error) {
+            console.error('Error loading client statistics:', error);
+            setStats({
+                activeLoans: 0,
+                completedLoans: 0,
+                overdueLoans: 0,
+                totalDaysOverdue: 0
+            });
+        } finally {
+            setLoadingStats(false);
+        }
+    };
+
     if (!isOpen || !client) return null;
 
     const formatRUT = (rut) => {
@@ -43,8 +122,8 @@ const ClientDetail = ({ client, isOpen, onClose }) => {
     const statusInfo = getStatusInfo(client.status);
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-gray-800 rounded-xl max-w-2xl w-full border border-gray-700 max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 py-8 px-4">
+            <div className="bg-gray-800 rounded-xl max-w-3xl w-full border border-gray-700 max-h-[85vh] overflow-y-auto my-auto">
                 {/* Header */}
                 <div className="flex items-center justify-between p-6 border-b border-gray-700">
                     <div className="flex items-center space-x-4">
@@ -129,53 +208,44 @@ const ClientDetail = ({ client, isOpen, onClose }) => {
                         </div>
                     </div>
 
-                    {/* Account Activity - Placeholder for future features */}
+                    {/* Account Activity - CON DATOS REALES */}
                     <div className="bg-gray-750 p-4 rounded-lg border border-gray-600">
                         <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
                             <Calendar className="mr-2" size={20} />
                             Actividad de la Cuenta
                         </h3>
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            <div className="text-center">
-                                <p className="text-2xl font-bold text-blue-400">0</p>
-                                <p className="text-sm text-gray-400">Préstamos Activos</p>
+                        {loadingStats ? (
+                            <div className="text-center py-8">
+                                <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-orange-500"></div>
+                                <p className="text-gray-400 mt-2">Cargando estadísticas...</p>
                             </div>
-                            <div className="text-center">
-                                <p className="text-2xl font-bold text-green-400">0</p>
-                                <p className="text-sm text-gray-400">Préstamos Completados</p>
+                        ) : (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div className="text-center p-3 bg-gray-800 rounded-lg">
+                                    <p className="text-2xl font-bold text-blue-400">{stats.activeLoans}</p>
+                                    <p className="text-sm text-gray-400">Préstamos Activos</p>
+                                </div>
+                                <div className="text-center p-3 bg-gray-800 rounded-lg">
+                                    <p className="text-2xl font-bold text-green-400">{stats.completedLoans}</p>
+                                    <p className="text-sm text-gray-400">Préstamos Completados</p>
+                                </div>
+                                <div className="text-center p-3 bg-gray-800 rounded-lg">
+                                    <p className={`text-2xl font-bold ${stats.totalDaysOverdue > 0 ? 'text-red-400' : 'text-yellow-400'}`}>
+                                        {stats.totalDaysOverdue}
+                                    </p>
+                                    <p className="text-sm text-gray-400">Días de Retraso Promedio</p>
+                                </div>
                             </div>
-                            <div className="text-center">
-                                <p className="text-2xl font-bold text-yellow-400">0</p>
-                                <p className="text-sm text-gray-400">Días de Retraso</p>
-                            </div>
-                        </div>
-                        <div className="mt-4 p-3 bg-gray-600/30 rounded-lg">
-                            <p className="text-sm text-gray-400 text-center">
-                                Historial de préstamos disponible próximamente
-                            </p>
-                        </div>
-                    </div>
+                        )}
 
-                    {/* Additional Information */}
-                    <div className="bg-gray-750 p-4 rounded-lg border border-gray-600">
-                        <h3 className="text-lg font-semibold text-white mb-4 flex items-center">
-                            <MapPin className="mr-2" size={20} />
-                            Información Adicional
-                        </h3>
-                        <div className="space-y-3">
-                            <div className="flex justify-between">
-                                <span className="text-gray-400">Fecha de registro:</span>
-                                <span className="text-white">Información no disponible</span>
+                        {/* Alerta si hay préstamos vencidos */}
+                        {!loadingStats && stats.overdueLoans > 0 && (
+                            <div className="mt-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                                <p className="text-red-400 text-sm">
+                                    ⚠️ Este cliente tiene {stats.overdueLoans} préstamo(s) vencido(s)
+                                </p>
                             </div>
-                            <div className="flex justify-between">
-                                <span className="text-gray-400">Última actualización:</span>
-                                <span className="text-white">Información no disponible</span>
-                            </div>
-                            <div className="flex justify-between">
-                                <span className="text-gray-400">Cliente desde:</span>
-                                <span className="text-white">Información no disponible</span>
-                            </div>
-                        </div>
+                        )}
                     </div>
                 </div>
 

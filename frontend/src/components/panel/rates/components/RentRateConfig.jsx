@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { DollarSign, Calendar, Save, X, AlertTriangle, CheckCircle } from 'lucide-react';
-import { RATE_TYPES, formatCurrency, validateAmount, validateDateRange, VALIDATION_MESSAGES } from '../utils/rateConstants';
+import { RATE_TYPES, formatCurrency, validateAmount, validateDateRange } from '../utils/rateConstants';
 
 const RentRateConfig = ({
                             currentRate = 0,
@@ -8,7 +8,6 @@ const RentRateConfig = ({
                             onCreate,
                             onUpdate,
                             onDeactivate,
-                            onShowHistory,
                             loading = false,
                             isAdmin = false
                         }) => {
@@ -75,8 +74,12 @@ const RentRateConfig = ({
 
         // Validar fecha de inicio no sea en el pasado (solo para nuevas tarifas)
         if (!editingId && formData.effectiveFrom) {
-            const today = new Date().toISOString().split('T')[0];
-            if (formData.effectiveFrom < today) {
+            // Obtener fecha local correcta (sin problemas de zona horaria)
+            const now = new Date();
+            const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const selectedDate = new Date(formData.effectiveFrom + 'T00:00:00');
+
+            if (selectedDate < today) {
                 newErrors.effectiveFrom = 'La fecha de inicio debe ser hoy o una fecha futura';
             }
         }
@@ -153,23 +156,15 @@ const RentRateConfig = ({
                     </div>
                 </div>
 
-                <div className="flex gap-2">
+                {isAdmin && (
                     <button
-                        onClick={onShowHistory}
-                        className="px-4 py-2 text-gray-400 hover:text-white border border-gray-600 hover:border-gray-500 rounded-lg transition-colors"
+                        onClick={() => setShowForm(!showForm)}
+                        className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
                     >
-                        Ver Historial
+                        {showForm ? <X size={18} /> : <DollarSign size={18} />}
+                        {showForm ? 'Cancelar' : 'Nueva Tarifa'}
                     </button>
-                    {isAdmin && (
-                        <button
-                            onClick={() => setShowForm(!showForm)}
-                            className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors"
-                        >
-                            {showForm ? <X size={18} /> : <DollarSign size={18} />}
-                            {showForm ? 'Cancelar' : 'Nueva Tarifa'}
-                        </button>
-                    )}
-                </div>
+                )}
             </div>
 
             {/* Error general */}

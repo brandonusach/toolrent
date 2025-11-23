@@ -273,24 +273,51 @@ public class KardexMovementController {
         }
     }
 
-    // GET /api/kardex-movements/date-range - Get movements by date range (RF5.3)
+    // GET /api/kardex-movements/date-range - Get movements by date range (RF5.3) - CORREGIDO
     @GetMapping("/date-range")
     public ResponseEntity<?> getMovementsByDateRange(
             @RequestParam String startDate,
             @RequestParam String endDate) {
         try {
+            System.out.println("=== DEBUG: Getting movements by date range: " + startDate + " to " + endDate + " ===");
             LocalDate start = LocalDate.parse(startDate);
             LocalDate end = LocalDate.parse(endDate);
 
             List<KardexMovementEntity> movements = kardexMovementService.getMovementsByDateRange(start, end);
-            return new ResponseEntity<>(movements, HttpStatus.OK);
+            System.out.println("=== DEBUG: Found " + movements.size() + " movements in date range ===");
+
+            // 🔧 CORRECCIÓN: Convertir a DTOs para evitar problemas de serialización
+            List<KardexMovementDTO> movementDTOs = movements.stream()
+                    .map(movement -> {
+                        try {
+                            return KardexMovementDTO.fromEntity(movement);
+                        } catch (Exception e) {
+                            System.err.println("Error converting movement to DTO: " + e.getMessage());
+                            // Crear un DTO básico con información mínima en caso de error
+                            KardexMovementDTO basicDto = new KardexMovementDTO();
+                            basicDto.setId(movement.getId());
+                            basicDto.setType(movement.getType() != null ? movement.getType().toString() : "UNKNOWN");
+                            basicDto.setQuantity(movement.getQuantity());
+                            basicDto.setStockBefore(movement.getStockBefore());
+                            basicDto.setStockAfter(movement.getStockAfter());
+                            basicDto.setDescription(movement.getDescription());
+                            basicDto.setCreatedAt(movement.getCreatedAt());
+                            return basicDto;
+                        }
+                    })
+                    .collect(Collectors.toList());
+
+            System.out.println("=== DEBUG: Successfully converted " + movementDTOs.size() + " movements to DTOs ===");
+            return new ResponseEntity<>(movementDTOs, HttpStatus.OK);
         } catch (Exception e) {
+            System.err.println("=== DEBUG: Error in getMovementsByDateRange: " + e.getMessage());
+            e.printStackTrace();
             return new ResponseEntity<>("Error parsing dates or retrieving movements: " + e.getMessage(),
-                    HttpStatus.BAD_REQUEST);
+                    HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
-    // GET /api/kardex-movements/date-range-datetime - Get movements by datetime range
+    // GET /api/kardex-movements/date-range-datetime - Get movements by datetime range - CORREGIDO
     @GetMapping("/date-range-datetime")
     public ResponseEntity<?> getMovementsByDateTimeRange(
             @RequestParam String startDateTime,
@@ -300,21 +327,33 @@ public class KardexMovementController {
             LocalDateTime end = LocalDateTime.parse(endDateTime);
 
             List<KardexMovementEntity> movements = kardexMovementService.getMovementsByDateRange(start, end);
-            return new ResponseEntity<>(movements, HttpStatus.OK);
+
+            // 🔧 CORRECCIÓN: Convertir a DTOs
+            List<KardexMovementDTO> movementDTOs = movements.stream()
+                    .map(KardexMovementDTO::fromEntity)
+                    .collect(Collectors.toList());
+
+            return new ResponseEntity<>(movementDTOs, HttpStatus.OK);
         } catch (Exception e) {
             return new ResponseEntity<>("Error parsing datetimes or retrieving movements: " + e.getMessage(),
-                    HttpStatus.BAD_REQUEST);
+                    HttpStatus.INTERNAL_SERVER_ERROR);
         }
     }
 
-    // GET /api/kardex-movements/type/{type} - Get movements by type
+    // GET /api/kardex-movements/type/{type} - Get movements by type - CORREGIDO
     @GetMapping("/type/{type}")
     public ResponseEntity<?> getMovementsByType(@PathVariable String type) {
         try {
             KardexMovementEntity.MovementType movementType =
                     KardexMovementEntity.MovementType.valueOf(type.toUpperCase());
             List<KardexMovementEntity> movements = kardexMovementService.getMovementsByType(movementType);
-            return new ResponseEntity<>(movements, HttpStatus.OK);
+
+            // 🔧 CORRECCIÓN: Convertir a DTOs
+            List<KardexMovementDTO> movementDTOs = movements.stream()
+                    .map(KardexMovementDTO::fromEntity)
+                    .collect(Collectors.toList());
+
+            return new ResponseEntity<>(movementDTOs, HttpStatus.OK);
         } catch (IllegalArgumentException e) {
             return new ResponseEntity<>("Invalid movement type: " + type, HttpStatus.BAD_REQUEST);
         } catch (Exception e) {
@@ -322,12 +361,18 @@ public class KardexMovementController {
         }
     }
 
-    // GET /api/kardex-movements/loan/{loanId} - Get movements by loan ID
+    // GET /api/kardex-movements/loan/{loanId} - Get movements by loan ID - CORREGIDO
     @GetMapping("/loan/{loanId}")
     public ResponseEntity<?> getMovementsByLoanId(@PathVariable Long loanId) {
         try {
             List<KardexMovementEntity> movements = kardexMovementService.getMovementsByLoanId(loanId);
-            return new ResponseEntity<>(movements, HttpStatus.OK);
+
+            // 🔧 CORRECCIÓN: Convertir a DTOs
+            List<KardexMovementDTO> movementDTOs = movements.stream()
+                    .map(KardexMovementDTO::fromEntity)
+                    .collect(Collectors.toList());
+
+            return new ResponseEntity<>(movementDTOs, HttpStatus.OK);
         } catch (Exception e) {
             return new ResponseEntity<>("Error retrieving movements by loan", HttpStatus.INTERNAL_SERVER_ERROR);
         }
